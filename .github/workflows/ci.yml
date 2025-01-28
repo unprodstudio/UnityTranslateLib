@@ -37,10 +37,8 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Linux x86-64 Targets
-          path: native/target/*
-      #    name: Linux x86-64 Natives
-      #    path: native/build/libs/UnityTranslateLib-*.jar
+          name: Linux x86-64 Natives
+          path: native/build/libs/UnityTranslateLib-*.jar
   build-linux-arm64:
     environment: UnityTranslate Build
     runs-on: ubuntu-24.04-arm
@@ -71,10 +69,8 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Linux arm64 Targets
-          path: native/target/*
-      #    name: Linux arm64 Natives
-      #    path: native/build/libs/UnityTranslateLib-*.jar
+          name: Linux arm64 Natives
+          path: native/build/libs/UnityTranslateLib-*.jar
   build-osx:
     environment: UnityTranslate Build
     runs-on: macos-latest

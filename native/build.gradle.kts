@@ -33,9 +33,9 @@ data class RustPlatform(
 
 val RUST_TARGETS = listOf(
     RustPlatform("aarch64-apple-darwin", "osx", "aarch64", listOf()), // macOS arm64
-    RustPlatform("aarch64-unknown-linux-gnu", "linux", "aarch64", listOf()), // Linux aarch64
+    RustPlatform("aarch64-unknown-linux-gnu", "linux", "aarch64", listOf("libUnityTranslateLib.so")), // Linux aarch64
     RustPlatform("x86_64-pc-windows-msvc", "windows", "amd64", listOf("UnityTranslateLib.dll")), // Windows x86-64
-    RustPlatform("x86_64-unknown-linux-gnu", "linux", "amd64", listOf()), // Linux x86-64
+    RustPlatform("x86_64-unknown-linux-gnu", "linux", "amd64", listOf("libUnityTranslateLib.so")), // Linux x86-64
 )
 
 open class ExecutableTask @Inject constructor(@Internal val execOperations: ExecOperations) : DefaultTask()
