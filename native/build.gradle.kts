@@ -32,8 +32,8 @@ data class RustPlatform(
 }
 
 val RUST_TARGETS = listOf(
-    RustPlatform("aarch64-apple-darwin", "osx", "aarch64", listOf()), // macOS arm64
-    RustPlatform("aarch64-unknown-linux-gnu", "linux", "aarch64", listOf("libUnityTranslateLib.so")), // Linux aarch64
+    //RustPlatform("aarch64-apple-darwin", "osx", "aarch64", listOf()), // macOS arm64
+    //RustPlatform("aarch64-unknown-linux-gnu", "linux", "aarch64", listOf("libUnityTranslateLib.so")), // Linux aarch64
     RustPlatform("x86_64-pc-windows-msvc", "windows", "amd64", listOf("UnityTranslateLib.dll")), // Windows x86-64
     RustPlatform("x86_64-unknown-linux-gnu", "linux", "amd64", listOf("libUnityTranslateLib.so")), // Linux x86-64
 )
@@ -71,18 +71,18 @@ val ct2Files = mapOf(
         StringBased("ctranslate2/cudnn64_9.dll", "cudnn64_9.dll"),
         StringBased("ctranslate2/libiomp5md.dll", "libiomp5md.dll")
     ),
-    Platform("macOS", "arm64") to listOf(
+    /*Platform("macOS", "arm64") to listOf(
         RegexBased(Regex("ctranslate2/\\.dylibs/libctranslate2\\.\\d\\.\\d\\.\\d\\.dylib"), "libctranslate2.dylib")
-    ),
+    ),*/
     Platform("Linux", "auto64") to listOf(
         RegexBased(Regex("ctranslate2\\.libs/libctranslate2-\\w+\\.so\\.\\d\\.\\d\\.\\d"), "libctranslate2.so"),
         RegexBased(Regex("ctranslate2\\.libs/libcudnn-\\w+\\.so\\.\\d\\.\\d\\.\\d"), "libcudnn.so"),
         RegexBased(Regex("ctranslate2\\.libs/libgomp-\\w+\\.so\\.\\d\\.\\d\\.\\d"), "libgomp.so"),
     ),
-    Platform("Linux", "aarch64") to listOf(
+    /*Platform("Linux", "aarch64") to listOf(
         RegexBased(Regex("ctranslate2\\.libs/libctranslate2-\\w+\\.so\\.\\d\\.\\d\\.\\d"), "libctranslate2.so"),
         RegexBased(Regex("ctranslate2\\.libs/libgomp-\\w+\\.so\\.\\d\\.\\d\\.\\d"), "libgomp.so"),
-    )
+    )*/
 )
 
 tasks {
