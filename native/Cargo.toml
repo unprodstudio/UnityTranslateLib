@@ -1,0 +1,13 @@
+[package]
+name = "UnityTranslateLib"
+version = "0.2.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+ct2rs = { git = "https://github.com/UnityMultiplayer/ctranslate2-rs.git" }
+jni = "0.21.1"
+rust_tokenizers = "8.1.1"
+anyhow = "1.0.95"
