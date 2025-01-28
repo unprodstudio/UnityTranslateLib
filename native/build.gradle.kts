@@ -22,7 +22,7 @@ data class RustPlatform(
         // is there seriously no better way to do this
         if (
             (systemName == "windows" && !hostOs.contains("windows")) ||
-            (systemName == "osx" && (!hostOs.contains("mac") || !hostOs.contains("darwin"))) ||
+            (systemName == "osx" && !hostOs.contains("mac") && !hostOs.contains("darwin")) ||
             (systemName == "linux" && (!hostOs.contains("linux")))
         )
             return false
