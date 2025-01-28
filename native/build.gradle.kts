@@ -185,6 +185,8 @@ tasks {
     }
 
     create("moveTargetFiles") {
+        dependsOn("rustBuild", "downloadCTranslate2")
+
         doFirst {
             val nativesDir = layout.buildDirectory.get().dir("ut_natives")
             if (!nativesDir.asFile.exists())
