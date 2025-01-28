@@ -1,0 +1,130 @@
+name: Gradle CI
+
+on:
+  - push
+
+permissions:
+  contents: read
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      # Taken from https://github.com/CaffeineMC/sodium-fabric/blob/1.19.3/dev/.github/workflows/gradle.yml
+      - name: Cache/Uncache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/loom-cache
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+      - name: Build artifacts
+        run: ./gradlew :native:jar
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Linux x86-64 Targets
+          path: native/target/*
+      #    name: Linux x86-64 Natives
+      #    path: native/build/libs/UnityTranslateLib-*.jar
+  build-linux-arm64:
+    environment: UnityTranslate Build
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      # Taken from https://github.com/CaffeineMC/sodium-fabric/blob/1.19.3/dev/.github/workflows/gradle.yml
+      - name: Cache/Uncache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/loom-cache
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+      - name: Build artifacts
+        run: ./gradlew :native:jar
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Linux arm64 Targets
+          path: native/target/*
+      #    name: Linux arm64 Natives
+      #    path: native/build/libs/UnityTranslateLib-*.jar
+  build-osx:
+    environment: UnityTranslate Build
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      # Taken from https://github.com/CaffeineMC/sodium-fabric/blob/1.19.3/dev/.github/workflows/gradle.yml
+      - name: Cache/Uncache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/loom-cache
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+      - name: Build artifacts
+        run: ./gradlew :native:jar
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macOS arm64 Targets
+          path: native/target/*
+      #    name: macOS arm64 Natives
+      #    path: native/build/libs/UnityTranslateLib-*.jar
+  build-windows:
+    environment: UnityTranslate Build
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      # Taken from https://github.com/CaffeineMC/sodium-fabric/blob/1.19.3/dev/.github/workflows/gradle.yml
+      - name: Cache/Uncache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/loom-cache
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+      - name: Build artifacts
+        run: ./gradlew :native:jar
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows x86-64 Natives
+          path: native/build/libs/UnityTranslateLib-*.jar
