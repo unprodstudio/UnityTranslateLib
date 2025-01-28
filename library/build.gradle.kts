@@ -1,11 +1,7 @@
 plugins {
     kotlin("jvm") version "2.1.0"
     kotlin("plugin.serialization") version "2.1.0"
-    id("com.gradleup.shadow") version "8.3.5"
 }
-
-group = "xyz.bluspring"
-version = "0.2.0"
 
 repositories {
     mavenCentral()

@@ -1,10 +1,6 @@
 import java.net.URI
 import java.util.zip.ZipFile
 
-plugins {
-    java
-}
-
 val CT2_URL = "https://nightly.link/OpenNMT/CTranslate2/workflows/ci/master/python-wheels-{dist}-{arch}.zip"
 val ct2Version = rootProject.property("ct2_version")!! as String
 

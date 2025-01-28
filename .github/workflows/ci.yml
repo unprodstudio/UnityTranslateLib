@@ -32,8 +32,11 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/gradle-wrapper.properties') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
-      - name: Build artifacts
-        run: ./gradlew :native:jar
+      - name: Build and publish artifacts
+        run: ./gradlew publish
+        env:
+          MAVEN_USER: ${{ secrets.MAVEN_USER }}
+          MAVEN_PASS: ${{ secrets.MAVEN_PASS }}
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -64,8 +67,8 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/gradle-wrapper.properties') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
-      - name: Build artifacts
-        run: ./gradlew :native:jar
+      - name: Build and publish artifacts
+        run: ./gradlew :native:publish
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
