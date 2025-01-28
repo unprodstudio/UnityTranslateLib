@@ -171,12 +171,20 @@ tasks {
 
                 execOperations.exec {
                     commandLine(if (target.isHost()) "cargo" else "cross")
-                    args(
+
+                    val args = mutableListOf(
                         "build", "--release",
                         "--target", target.targetName,
                         "--package", "UnityTranslateLib",
                         "--lib"
                     )
+
+                    if (target.systemName == "osx") {
+                        args.add("-F")
+                        args.add("accelerate")
+                    }
+
+                    args(args)
                     standardOutput = System.out
                 }
                     .assertNormalExitValue()

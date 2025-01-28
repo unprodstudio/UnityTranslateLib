@@ -11,3 +11,6 @@ ct2rs = { git = "https://github.com/UnityMultiplayer/ctranslate2-rs.git" }
 jni = "0.21.1"
 rust_tokenizers = "8.1.1"
 anyhow = "1.0.95"
+
+[features]
+accelerate = ["ct2rs/accelerate"]

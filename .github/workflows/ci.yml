@@ -73,7 +73,7 @@ jobs:
           path: native/build/libs/UnityTranslateLib-*.jar
   build-osx:
     environment: UnityTranslate Build
-    runs-on: macos-latest
+    runs-on: macos-14
 
     steps:
       - uses: actions/checkout@v4
