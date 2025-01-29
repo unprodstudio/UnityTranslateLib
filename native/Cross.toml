@@ -1,2 +1,2 @@
 [target.x86_64-pc-windows-msvc]
-image = "chainreactors/x86_64-pc-windows-msvc-cross"
+image = "ghcr.io/cross-rs/x86_64-pc-windows-msvc-cross:local"
