@@ -18,6 +18,17 @@ dependencies {
     testRuntimeOnly("org.slf4j:slf4j-simple:2.0.16")
 }
 
+publishing {
+    publications {
+        register("maven", MavenPublication::class) {
+            groupId = "xyz.bluspring"
+            artifactId = "UnityTranslateLib"
+            version = "${rootProject.property("unitytranslate_version")}"
+            from(components.getByName("java"))
+        }
+    }
+}
+
 tasks.test {
     useJUnitPlatform()
 }

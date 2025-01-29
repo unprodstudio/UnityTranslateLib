@@ -242,7 +242,19 @@ tasks {
     jar {
         val target = RUST_TARGETS.first { it.isHost() }
 
-        archiveBaseName.set("UnityTranslateLib")
-        archiveClassifier.set("natives-${target.systemName}-${target.architecture}")
+        archiveBaseName.set("UnityTranslateLib-natives-${target.systemName}-${target.architecture}")
+    }
+}
+
+publishing {
+    val target = RUST_TARGETS.first { it.isHost() }
+
+    publications {
+        register("maven", MavenPublication::class) {
+            groupId = "xyz.bluspring"
+            artifactId = "UnityTranslateLib-natives-${target.systemName}-${target.architecture}"
+            version = "${rootProject.property("unitytranslate_version")}"
+            from(components.getByName("java"))
+        }
     }
 }
