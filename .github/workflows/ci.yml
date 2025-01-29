@@ -34,9 +34,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
       - name: Set up GCC
-        uses: egor-tensin/setup-mingw@v2.2.0
+        uses: egor-tensin/setup-mingw@v1
         with:
-          version: 12.2.0
+          version: latest
           platform: x64
       - name: Build and publish artifacts
         run: ./gradlew publish --info --stacktrace
