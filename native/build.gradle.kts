@@ -162,11 +162,8 @@ tasks {
 
         doFirst {
             for (target in RUST_TARGETS) {
-                if (!target.isHost()) // TODO: figure out cross-compilation.
-                    continue
-
                 execOperations.exec {
-                    commandLine(if (target.isHost()) "cargo" else "cross")
+                    commandLine("cargo")
 
                     val args = mutableListOf(
                         "build", "--release",
@@ -200,9 +197,6 @@ tasks {
             val targetsDir = layout.projectDirectory.dir("target")
             for (target in RUST_TARGETS) {
                 val utNativesDir = nativesDir.dir("unitytranslate").dir("${target.systemName}-${target.architecture}")
-
-                if (!target.isHost())
-                    continue
 
                 if (!utNativesDir.asFile.exists())
                     utNativesDir.asFile.mkdirs()
@@ -240,9 +234,7 @@ tasks {
     }
 
     jar {
-        val target = RUST_TARGETS.first { it.isHost() }
-
         archiveBaseName.set("UnityTranslateLib")
-        archiveClassifier.set("natives-${target.systemName}-${target.architecture}")
+        archiveClassifier.set("natives")
     }
 }
