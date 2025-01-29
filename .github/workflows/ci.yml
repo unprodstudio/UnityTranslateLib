@@ -33,8 +33,10 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/gradle-wrapper.properties') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
+      - name: Install Cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
       - name: Build and publish artifacts
-        run: ./gradlew publish --debug --stacktrace
+        run: ./gradlew publish --info --stacktrace
         env:
           MAVEN_USER: ${{ secrets.MAVEN_USER }}
           MAVEN_PASS: ${{ secrets.MAVEN_PASS }}
