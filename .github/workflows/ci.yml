@@ -34,7 +34,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
       - name: Build and publish artifacts
-        run: ./gradlew publish --info
+        run: ./gradlew publish --debug --stacktrace
         env:
           MAVEN_USER: ${{ secrets.MAVEN_USER }}
           MAVEN_PASS: ${{ secrets.MAVEN_PASS }}
