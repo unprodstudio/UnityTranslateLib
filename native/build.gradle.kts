@@ -163,7 +163,7 @@ tasks {
         doFirst {
             for (target in RUST_TARGETS) {
                 execOperations.exec {
-                    commandLine(if (target.isHost()) "cargo" else "cross")
+                    commandLine("cargo")
 
                     val args = mutableListOf(
                         "build", "--release",
