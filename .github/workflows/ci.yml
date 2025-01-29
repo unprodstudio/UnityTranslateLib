@@ -35,6 +35,12 @@ jobs:
             ${{ runner.os }}-gradle-
       - name: Install Cross
         run: cargo install cross --git https://github.com/cross-rs/cross
+      - name: Configure Cross Tool
+        run: cargo xtask configure-crosstool
+      - name: Install Cargo Docker Builder
+        run: cargo install cargo-build-docker
+      - name: Setup Windows Docker image
+        run: cargo build-docker-image x86_64-pc-windows-msvc-cross --tag local
       - name: Build and publish artifacts
         run: ./gradlew publish --info --stacktrace
         env:
