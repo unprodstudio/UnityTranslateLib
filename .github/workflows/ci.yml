@@ -33,11 +33,8 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/gradle-wrapper.properties') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
-      - name: Set up GCC
-        uses: egor-tensin/setup-gcc@v1
-        with:
-          version: latest
-          platform: x64
+      - name: Install Cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
       - name: Build and publish artifacts
         run: ./gradlew publish --info --stacktrace
         env:
