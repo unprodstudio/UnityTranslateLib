@@ -6,7 +6,7 @@ subprojects {
     apply(plugin = "java")
     apply(plugin = "maven-publish")
 
-    group = "xyz.bluspring"
+    group = "xyz.bluspring.unitytranslate"
     version = "${rootProject.property("unitytranslate_version")}"
 
     repositories {

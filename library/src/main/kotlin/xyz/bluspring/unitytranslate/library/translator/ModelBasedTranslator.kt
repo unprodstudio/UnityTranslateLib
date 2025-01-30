@@ -7,11 +7,11 @@ class ModelBasedTranslator(library: UnityTranslateLib, code: String) : Translato
     var isReady = false
         private set
 
-    override suspend fun load() {
+    override suspend fun load(useCuda: Boolean) {
         if (isReady)
             return
 
-        modelPtrs = library.packageIndex.tryLoadModels(code)
+        modelPtrs = library.packageIndex.tryLoadModels(code, useCuda)
         isReady = true
     }
 

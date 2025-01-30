@@ -42,14 +42,14 @@ class ModelPackageManager(val library: UnityTranslateLib) {
         return mapOf()
     }
 
-    suspend fun tryLoadModels(code: String): Map<String, Long> {
+    suspend fun tryLoadModels(code: String, useCuda: Boolean): Map<String, Long> {
         val split = code.split("_")
         val fromCode = split[0]
         val toCode = split[1]
-        return tryLoadModels(fromCode, toCode)
+        return tryLoadModels(fromCode, toCode, useCuda)
     }
 
-    suspend fun tryLoadModels(fromCode: String, toCode: String): Map<String, Long> {
+    suspend fun tryLoadModels(fromCode: String, toCode: String, useCuda: Boolean): Map<String, Long> {
         val modelInfos = this.getModelInfos(fromCode, toCode)
 
         if (modelInfos.isEmpty())
@@ -65,7 +65,7 @@ class ModelPackageManager(val library: UnityTranslateLib) {
         }
 
         infos.toList().asFlow().concurrent().collect { (pkg, modelInfo) ->
-            val modelPtr = library.loadModel(modelInfo.modelPath.absolutePathString(), modelInfo.spModelPath?.absolutePathString(), modelInfo.bpeModelPath?.absolutePathString(), false)
+            val modelPtr = library.loadModel(modelInfo.modelPath.absolutePathString(), modelInfo.spModelPath?.absolutePathString(), modelInfo.bpeModelPath?.absolutePathString(), useCuda)
 
             if (modelPtr != 0L) {
                 loadedModelPtrs[pkg.code] = modelPtr

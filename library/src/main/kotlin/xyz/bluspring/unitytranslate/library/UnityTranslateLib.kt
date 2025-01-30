@@ -27,7 +27,7 @@ class UnityTranslateLib(val path: Path) {
         packageIndex.load()
     }
 
-    private suspend fun createTranslator(code: String): Translator {
+    private suspend fun createTranslator(code: String, useCuda: Boolean = false): Translator {
         val split = code.split("_")
 
         val translator = if (split[0] == split[1])
@@ -36,7 +36,7 @@ class UnityTranslateLib(val path: Path) {
         else
             ModelBasedTranslator(this, code)
 
-        translator.load()
+        translator.load(useCuda)
 
         return translator
     }
