@@ -21,7 +21,7 @@ dependencies {
 publishing {
     publications {
         register("maven", MavenPublication::class) {
-            groupId = "xyz.bluspring"
+            groupId = "xyz.bluspring.unitytranslate"
             artifactId = "UnityTranslateLib"
             version = "${rootProject.property("unitytranslate_version")}"
             from(components.getByName("java"))

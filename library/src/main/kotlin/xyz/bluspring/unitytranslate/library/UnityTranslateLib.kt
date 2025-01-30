@@ -41,15 +41,17 @@ class UnityTranslateLib(val path: Path) {
         return translator
     }
 
-    suspend fun getTranslator(fromCode: String, toCode: String): Translator {
-        return getTranslator("${fromCode}_${toCode}")
+    suspend fun getTranslator(fromCode: String, toCode: String, usesCuda: Boolean = false): Translator {
+        return getTranslator("${fromCode}_${toCode}" + if (usesCuda) "+cuda" else "", usesCuda)
     }
 
-    suspend fun getTranslator(code: String): Translator {
-        if (!translators.containsKey(code))
-            translators[code] = createTranslator(code)
+    suspend fun getTranslator(code: String, usesCuda: Boolean = false): Translator {
+        val formattedCode = code + if (usesCuda) "+cuda" else ""
 
-        return translators[code]!!
+        if (!translators.containsKey(formattedCode))
+            translators[formattedCode] = createTranslator(code, usesCuda)
+
+        return translators[formattedCode]!!
     }
 
     @ApiStatus.Internal

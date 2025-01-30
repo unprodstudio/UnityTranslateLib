@@ -251,7 +251,7 @@ publishing {
 
     publications {
         register("maven", MavenPublication::class) {
-            groupId = "xyz.bluspring"
+            groupId = "xyz.bluspring.unitytranslatelib"
             artifactId = "UnityTranslateLib-natives-${target.systemName}-${target.architecture}"
             version = "${rootProject.property("unitytranslate_version")}"
             from(components.getByName("java"))
