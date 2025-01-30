@@ -8,8 +8,13 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.io.path.absolutePathString
 
 class ModelPackageManager(val library: UnityTranslateLib) {
-    private val indexList = mutableListOf<PackageIndex<*>>()
+    val indexList = mutableListOf<PackageIndex<*>>()
     private val loadedModelPtrs = ConcurrentHashMap<String, Long>()
+
+    val packages: List<ModelPackage>
+        get() {
+            return indexList.map { it.packages }.flatten()
+        }
 
     fun <T : ModelPackage> registerIndex(index: PackageIndex<T>) {
         indexList.add(index)
