@@ -210,14 +210,14 @@ suspend fun <T, S : T> ConcurrentFlow<T>.reduce(
                 val acc = accumulator.get()
                 if (acc === empty) {
                     val exchanged = accumulator
-                        .weakCompareAndSetPlain(empty, v)
+                        .weakCompareAndSet(empty, v)
                     when {
                         exchanged -> return
                         else -> continue
                     }
                 } else {
                     val exchanged = accumulator
-                        .weakCompareAndSetPlain(acc, empty)
+                        .weakCompareAndSet(acc, empty)
                     if (!exchanged) {
                         continue
                     }

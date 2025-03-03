@@ -80,7 +80,7 @@ class ArgosPackageIndex(path: Path) : PackageIndex<ArgosPackage>(path, "argos") 
                 val zipPath = path.resolve("${pkg.code}_${pkg.packageVersion}.argosmodel")
                 url.openStream().use {
                     zipPath.outputStream().use { o ->
-                        it.transferTo(o)
+                        it.copyTo(o)
                     }
                 }
 
@@ -96,7 +96,7 @@ class ArgosPackageIndex(path: Path) : PackageIndex<ArgosPackage>(path, "argos") 
                     file.createNewFile()
                     zipFile.getInputStream(entry).use {
                         file.outputStream().use { f ->
-                            it.transferTo(f)
+                            it.copyTo(f)
                         }
                     }
                 }
