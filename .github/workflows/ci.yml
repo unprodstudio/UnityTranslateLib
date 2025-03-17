@@ -37,11 +37,6 @@ jobs:
         env:
           MAVEN_USER: ${{ secrets.MAVEN_USER }}
           MAVEN_PASS: ${{ secrets.MAVEN_PASS }}
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: Linux x86-64 Natives
-          path: native/build/libs/UnityTranslateLib-*.jar
   build-windows:
     environment: UnityTranslate Build
     runs-on: windows-latest
@@ -72,8 +67,3 @@ jobs:
         env:
           MAVEN_USER: ${{ secrets.MAVEN_USER }}
           MAVEN_PASS: ${{ secrets.MAVEN_PASS }}
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: Windows x86-64 Natives
-          path: native/build/libs/UnityTranslateLib-*.jar
