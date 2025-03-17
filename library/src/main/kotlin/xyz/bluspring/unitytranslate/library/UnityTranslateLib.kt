@@ -30,7 +30,7 @@ class UnityTranslateLib(val path: Path) {
     private suspend fun createTranslator(code: String, useCuda: Boolean = false): Translator {
         val split = code.split("_")
 
-        val translator = if (split[0] == split[1])
+        val translator = if (split[0] == split[1] || !isAvailable())
             // Just passthrough if they are the same
             DummyTranslator(this, code)
         else
@@ -65,28 +65,35 @@ class UnityTranslateLib(val path: Path) {
 
         // Modified from ImGui-java's library loading - https://github.com/SpaiR/imgui-java/blob/main/imgui-binding/src/main/java/imgui/ImGui.java
         init {
-            val libPath = System.getProperty("unitytranslate.library.path")
-            val libName = System.getProperty("unitytranslate.library.name", "UnityTranslateLib")
-            val fullLibName = resolveFullLibName()
+            if (isAvailable()) {
+                val libPath = System.getProperty("unitytranslate.library.path")
+                val libName = System.getProperty("unitytranslate.library.name", "UnityTranslateLib")
+                val fullLibName = resolveFullLibName()
 
-            if (libPath != null) {
-                System.load(Paths.get(libPath).resolve(fullLibName).absolutePathString())
-            } else {
-                try {
-                    System.loadLibrary(libName)
-                } catch (e: Throwable) {
-                    val extractedPath = try {
-                        tryLoadFromClassPath(fullLibName)
-                    } catch (e2: Exception) {
-                        val joined = RuntimeException("Failed to load natives for UnityTranslateLib!")
-                        joined.addSuppressed(e2)
-                        joined.addSuppressed(e)
+                if (libPath != null) {
+                    System.load(Paths.get(libPath).resolve(fullLibName).absolutePathString())
+                } else {
+                    try {
+                        System.loadLibrary(libName)
+                    } catch (e: Throwable) {
+                        val extractedPath = try {
+                            tryLoadFromClassPath(fullLibName)
+                        } catch (e2: Exception) {
+                            val joined = RuntimeException("Failed to load natives for UnityTranslateLib!")
+                            joined.addSuppressed(e2)
+                            joined.addSuppressed(e)
 
-                        throw joined
+                            throw joined
+                        }
+
+                        for (lib in platformLibs.reversed()) {
+                            System.load(extractedPath.resolve(lib).absolutePathString())
+                        }
                     }
-
-                    System.load(extractedPath)
                 }
+            } else {
+                logger.warn("UnityTranslateLib is unsupported on platform ${System.getProperty("os.name")} (${System.getProperty("os.arch")})!")
+                logger.warn("As a result, UnityTranslateLib will not be translating, and may cause errors if any native calls are attempted.")
             }
         }
 
@@ -122,15 +129,15 @@ class UnityTranslateLib(val path: Path) {
                         listOf()
                     else
                         listOf(
+                            "$dir/libUnityTranslateLib.so",
                             "$dir/libctranslate2.so",
                             "$dir/libcudnn.so",
-                            "$dir/libgomp.so",
-                            "$dir/libUnityTranslateLib.so"
+                            "$dir/libgomp.so"
                         )
                 } else emptyList()
             }
 
-        private fun tryLoadFromClassPath(fullLibName: String): String {
+        private fun tryLoadFromClassPath(fullLibName: String): Path {
             val classLoader = UnityTranslateLib::class.java.classLoader
             val libs = platformLibs
 
@@ -160,7 +167,13 @@ class UnityTranslateLib(val path: Path) {
             if (!unityTranslatePath.exists())
                 throw Exception("Failed to load library files for UnityTranslateLib!")
 
-            return unityTranslatePath.absolutePathString()
+            return tmpDir
+        }
+
+        private val cachedPlatformLibs = platformLibs
+
+        fun isAvailable(): Boolean {
+            return cachedPlatformLibs.isNotEmpty()
         }
     }
 }
