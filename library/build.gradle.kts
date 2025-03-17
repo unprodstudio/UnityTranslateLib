@@ -32,6 +32,9 @@ publishing {
 tasks.test {
     useJUnitPlatform()
 }
+java {
+    withSourcesJar()
+}
 kotlin {
     jvmToolchain(8)
 }
