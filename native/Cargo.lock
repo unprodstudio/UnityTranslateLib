@@ -9,6 +9,7 @@ dependencies = [
  "anyhow",
  "ct2rs",
  "jni",
+ "regex",
  "rust_tokenizers",
  "tokenizers",
 ]

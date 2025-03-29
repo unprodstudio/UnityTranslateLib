@@ -12,6 +12,7 @@ jni = "0.21.1"
 rust_tokenizers = "8.1.1"
 anyhow = "1.0.95"
 tokenizers = "0.21.1"
+regex = "1.11.1"
 
 [features]
 accelerate = ["ct2rs/accelerate"]
