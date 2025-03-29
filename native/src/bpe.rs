@@ -142,7 +142,7 @@ impl Default for BPEConstants {
             ).as_str()).unwrap(),
 
             IS_CURRENCY_SYMBOL: Regex::new(
-                format!(r"^[{}\(\[\{{\¿\¡]+$", IS_SC).as_str()
+                format!(r"^[({}\[{{¿¡]+$", IS_SC).as_str()
             ).unwrap(),
             IS_ENGLISH_CONTRACTION: Regex::new(
                 format!(r"^['][{}]", IS_ALPHA).as_str()
