@@ -1,23 +1,52 @@
+mod bpe;
+
 use std::cmp::max;
+use std::fs;
 use ct2rs::{Config, Device, Tokenizer, TranslationOptions, Translator};
 use jni::JNIEnv;
 use jni::objects::{JClass, JObjectArray, JString};
 use jni::sys::{jboolean, jlong, jobjectArray, jsize};
 use rust_tokenizers::tokenizer::{SentencePieceTokenizer, Tokenizer as RTTokenizer};
+use tokenizers::Model;
+use crate::bpe::BPETokenizer;
+
+// I know I'm not good at Rust.
+// But at least it's functional.... I think.
 
 struct UnityTranslateTokenizer {
-    sentence_piece_tokenizer: SentencePieceTokenizer,
+    sentence_piece_tokenizer: Option<SentencePieceTokenizer>,
+    bpe_tokenizer: Option<BPETokenizer>
 }
 
 impl Tokenizer for UnityTranslateTokenizer {
     fn encode(&self, input: &str) -> anyhow::Result<Vec<String>> {
-        let result = self.sentence_piece_tokenizer.tokenize(input);
-        Ok(result)
+        if let Some(sp) = &self.sentence_piece_tokenizer {
+            let result = sp.tokenize(input);
+            Ok(result)
+        } else if let Some(bpe) = &self.bpe_tokenizer {
+            let result = bpe.encode(input);
+
+            if let Ok(result) = result {
+                let segmented = bpe.segment_tokens(result);
+                Ok(segmented)
+            } else {
+                Err(result.err().unwrap())
+            }
+        } else {
+            Err(anyhow::anyhow!("UnityTranslateTokenizer"))
+        }
     }
 
     fn decode(&self, tokens: Vec<String>) -> anyhow::Result<String> {
-        let result = self.sentence_piece_tokenizer.convert_tokens_to_string(tokens);
-        Ok(result)
+        if let Some(sp) = &self.sentence_piece_tokenizer {
+            let result = sp.convert_tokens_to_string(tokens);
+            Ok(result)
+        } else if let Some(bpe) = &self.bpe_tokenizer {
+            let result = bpe.decode(tokens);
+            result
+        } else {
+            Err(anyhow::anyhow!("UnityTranslateTokenizer"))
+        }
     }
 }
 
@@ -40,10 +69,13 @@ pub extern "system" fn Java_xyz_bluspring_unitytranslate_library_UnityTranslateL
         let tokenizer = SentencePieceTokenizer::from_file(spModelValue, false)
             .expect("Couldn't load SentencePiece model path!");
 
-        UnityTranslateTokenizer { sentence_piece_tokenizer: tokenizer }
+        UnityTranslateTokenizer { sentence_piece_tokenizer: Some(tokenizer), bpe_tokenizer: None }
     } else if !bpeModelPath.is_null() {
         let bpeModelValue: String = String::from(env.get_string(&bpeModelPath).unwrap());
-        panic!("Moses tokenizer was attempted to be used! Path: {bpeModelValue}");
+        let bpeModelData = fs::read_to_string(bpeModelValue).expect("Couldn't read BPE model file!");
+        let tokenizer = BPETokenizer::new(bpeModelData.as_str());
+
+        UnityTranslateTokenizer { sentence_piece_tokenizer: None, bpe_tokenizer: Some(tokenizer) }
     } else {
         panic!("No tokenizer path was provided!");
     };
