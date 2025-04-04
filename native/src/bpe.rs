@@ -72,6 +72,12 @@ pub struct BPEConstants {
     IS_PUNCT: Regex,
     IS_OPEN_QUOTE: Regex,
 
+    SYMBOLS: Regex,
+    NUMBERS: Regex,
+    S_END: Regex,
+    COLON: Regex,
+    OPEN_QUOTES: Regex,
+
     CJK_RANGES: Vec<(usize, usize)>,
 }
 
@@ -158,6 +164,12 @@ impl Default for BPEConstants {
             IS_OPEN_QUOTE: Regex::new(
                 r#"^['"„“`]+$"#
             ).unwrap(),
+
+            SYMBOLS: Regex::new(r"^[?!:;\\%]$").unwrap(),
+            NUMBERS: Regex::new(r"^[0-9]+$").unwrap(),
+            S_END: Regex::new(r"s$").unwrap(),
+            COLON: Regex::new(r"^:$").unwrap(),
+            OPEN_QUOTES: Regex::new(r"^[„“”]+$").unwrap(),
 
             CJK_RANGES: vec![
                 (4352, 4607),
@@ -400,7 +412,7 @@ impl Tokenizer for BPETokenizer {
                 detokenized_text += token;
                 prepend_space = "".to_string();
             } else if self.constants.IS_PUNCT.is_match(token) {
-                if lang == "fr" && Regex::new(r"^[?!:;\\%]$").unwrap().is_match(token) {
+                if lang == "fr" && self.constants.SYMBOLS.is_match(token) {
                     detokenized_text += " ";
                 }
 
@@ -410,9 +422,9 @@ impl Tokenizer for BPETokenizer {
                 detokenized_text += token;
                 prepend_space = " ".to_string();
             } else if lang == "cs" && i > 1
-                && Regex::new(r"^[0-9]+$").unwrap().is_match(tokens[tokens.len() - 2])
+                && self.constants.NUMBERS.is_match(tokens[tokens.len() - 2])
                 && Regex::new(r"^[.,]+$").unwrap().is_match(tokens[tokens.len() - 1])
-                && Regex::new(r"^[0-9]+$").unwrap().is_match(token) {
+                && self.constants.NUMBERS.is_match(token) {
                 detokenized_text += token;
                 prepend_space = " ".to_string();
             } else if (lang == "fr" || lang == "it" || lang == "ga") && i <= tokens.len() - 2
@@ -430,7 +442,7 @@ impl Tokenizer for BPETokenizer {
                 prepend_space = "".to_string();
             } else if self.constants.IS_OPEN_QUOTE.is_match(token) {
                 let mut normalized_quo = token;
-                if Regex::new(r"^[„“”]+$").unwrap().is_match(token) {
+                if self.constants.OPEN_QUOTES.is_match(token) {
                     normalized_quo = &"\"";
                 }
                 
@@ -445,7 +457,7 @@ impl Tokenizer for BPETokenizer {
                 }
                 
                 if quote_counts[normalized_quo] % 2 == 0 {
-                    if lang == "en" && *token == "'" && i > 0 && Regex::new(r"[s]$").unwrap().is_match(tokens[i - 1]) {
+                    if lang == "en" && *token == "'" && i > 0 && self.constants.S_END.is_match(tokens[i - 1]) {
                         detokenized_text += token;
                         prepend_space = " ".to_string();
                     } else {
@@ -458,7 +470,7 @@ impl Tokenizer for BPETokenizer {
                     prepend_space = " ".to_string();
                     quote_counts.insert(normalized_quo, *quote_counts.get(normalized_quo).unwrap_or(&0) + 1);
                 }
-            } else if lang == "fi" && Regex::new(r"^:$").unwrap().is_match(tokens[i - 1]) && self.constants.FINNISH_REGEX.is_match(token) {
+            } else if lang == "fi" && self.constants.COLON.is_match(tokens[i - 1]) && self.constants.FINNISH_REGEX.is_match(token) {
                 detokenized_text += prepend_space.as_str();
                 detokenized_text += token;
                 prepend_space = " ".to_string();
