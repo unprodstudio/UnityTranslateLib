@@ -70,7 +70,7 @@ class ModelPackageManager(val library: UnityTranslateLib) {
         }
 
         infos.toList().asFlow().concurrent().collect { (pkg, modelInfo) ->
-            val modelPtr = library.loadModel(modelInfo.modelPath.absolutePathString(), modelInfo.spModelPath?.absolutePathString(), modelInfo.bpeModelPath?.absolutePathString(), useCuda)
+            val modelPtr = library.loadModel(modelInfo.code.split("_")[1], modelInfo.modelPath.absolutePathString(), modelInfo.spModelPath?.absolutePathString(), modelInfo.bpeModelPath?.absolutePathString(), useCuda)
 
             if (modelPtr != 0L) {
                 loadedModelPtrs[pkg.code] = modelPtr

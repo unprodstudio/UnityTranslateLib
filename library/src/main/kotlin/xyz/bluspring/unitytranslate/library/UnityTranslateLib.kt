@@ -55,7 +55,7 @@ class UnityTranslateLib(val path: Path) {
     }
 
     @ApiStatus.Internal
-    external fun loadModel(modelPath: String, spModelPath: String?, bpeModelPath: String?, useCuda: Boolean): Long
+    external fun loadModel(toLang: String, modelPath: String, spModelPath: String?, bpeModelPath: String?, useCuda: Boolean): Long
 
     @ApiStatus.Internal
     external fun batchTranslate(modelPtr: Long, textArray: Array<String>): Array<String>

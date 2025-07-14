@@ -13,12 +13,12 @@ use crate::bpe::BPETokenizer;
 // I know I'm not good at Rust.
 // But at least it's functional.... I think.
 
-struct UnityTranslateTokenizer {
+struct UnityTranslateTokenizer<'tokenizer> {
     sentence_piece_tokenizer: Option<SentencePieceTokenizer>,
-    bpe_tokenizer: Option<BPETokenizer>
+    bpe_tokenizer: Option<BPETokenizer<'tokenizer>>
 }
 
-impl Tokenizer for UnityTranslateTokenizer {
+impl<'tokenizer> Tokenizer for UnityTranslateTokenizer<'tokenizer> {
     fn encode(&self, input: &str) -> anyhow::Result<Vec<String>> {
         if let Some(sp) = &self.sentence_piece_tokenizer {
             let result = sp.tokenize(input);
@@ -53,7 +53,7 @@ impl Tokenizer for UnityTranslateTokenizer {
 #[no_mangle]
 pub extern "system" fn Java_xyz_bluspring_unitytranslate_library_UnityTranslateLib_loadModel<'local>(
     mut env: JNIEnv<'local>, class: JClass<'local>,
-    modelPath: JString<'local>, spModelPath: JString<'local>, bpeModelPath: JString<'local>,
+    toLang: JString<'local>, modelPath: JString<'local>, spModelPath: JString<'local>, bpeModelPath: JString<'local>,
     useCuda: jboolean,
 ) -> jlong {
     let modelPathValue: String = String::from(env.get_string(&modelPath).expect("Couldn't get java string value"));
@@ -73,7 +73,8 @@ pub extern "system" fn Java_xyz_bluspring_unitytranslate_library_UnityTranslateL
     } else if !bpeModelPath.is_null() {
         let bpeModelValue: String = String::from(env.get_string(&bpeModelPath).unwrap());
         let bpeModelData = fs::read_to_string(bpeModelValue).expect("Couldn't read BPE model file!");
-        let tokenizer = BPETokenizer::new(bpeModelData.as_str());
+        let toLangValue = String::from(env.get_string(&toLang).unwrap());
+        let tokenizer = BPETokenizer::new(env, toLangValue.as_str(), bpeModelData.as_str());
 
         UnityTranslateTokenizer { sentence_piece_tokenizer: None, bpe_tokenizer: Some(tokenizer) }
     } else {
