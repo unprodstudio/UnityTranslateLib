@@ -39,7 +39,11 @@ jobs:
           MAVEN_PASS: ${{ secrets.MAVEN_PASS }}
   build-windows:
     environment: UnityTranslate Build
-    runs-on: windows-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-24.04-arm, macos-13, macos-13-xlarge]
+      fail-fast: false
 
     steps:
       - uses: actions/checkout@v4

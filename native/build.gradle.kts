@@ -1,7 +1,13 @@
+import com.google.gson.JsonParser
 import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 import java.util.zip.ZipFile
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.toJavaDuration
 
-val CT2_URL = "https://nightly.link/OpenNMT/CTranslate2/workflows/ci/master/python-wheels-{dist}-{arch}.zip"
+val CT2_INDEX = "https://pypi.org/simple/ctranslate2/"
 val ct2Version = rootProject.property("ct2_version")!! as String
 
 data class RustPlatform(
@@ -10,7 +16,8 @@ data class RustPlatform(
     val architecture: String,
     val exportedFiles: List<String>
 ) {
-    val ct2Name = "${if (systemName == "osx") "macos" else systemName}-${if (architecture == "amd64") "auto64" else if (systemName == "osx") "arm64" else "aarch64"}"
+    val ct2Name =
+        "${if (systemName == "osx") "macos" else systemName}-${if (architecture == "amd64") "auto64" else if (systemName == "osx") "arm64" else "aarch64"}"
 
     fun isHost(): Boolean {
         val hostOs = System.getProperty("os.name").lowercase()
@@ -38,7 +45,9 @@ open class ExecutableTask @Inject constructor(@Internal val execOperations: Exec
 
 data class Platform(
     val distribution: String,
-    val architecture: String
+    val architecture: String,
+    val outputDist: String,
+    val outputArch: String
 )
 
 interface FileMatcher {
@@ -62,23 +71,27 @@ class RegexBased(val regex: Regex, override val fileName: String) : FileMatcher 
 // These files provide Python wheels, but we can technically access any one of them. We're looking for these
 // files in those wheels specifically.
 val ct2Files = mapOf(
-    Platform("Windows", "auto64") to listOf(
+    Platform("win", "amd64", "Windows", "auto64") to listOf(
         StringBased("ctranslate2/ctranslate2.dll", "ctranslate2.dll"),
         StringBased("ctranslate2/cudnn64_9.dll", "cudnn64_9.dll"),
         StringBased("ctranslate2/libiomp5md.dll", "libiomp5md.dll")
     ),
-    /*Platform("macOS", "arm64") to listOf(
+    Platform("macosx_10_13", "x86_64", "macOS", "x86_64") to listOf(
+        RegexBased(Regex("ctranslate2/\\.dylibs/libctranslate2\\.\\d\\.\\d\\.\\d\\.dylib"), "libctranslate2.dylib"),
+        RegexBased(Regex("ctranslate2/\\.dylibs/libiomp5\\.dylib"), "libiomp5.dylib")
+    ),
+    Platform("macosx_11_0", "arm64", "macOS", "arm64") to listOf(
         RegexBased(Regex("ctranslate2/\\.dylibs/libctranslate2\\.\\d\\.\\d\\.\\d\\.dylib"), "libctranslate2.dylib")
-    ),*/
-    Platform("Linux", "auto64") to listOf(
+    ),
+    Platform("manylinux_2_17", "x86_64.manylinux2014_x86_64", "Linux", "auto64") to listOf(
         RegexBased(Regex("ctranslate2\\.libs/libctranslate2-\\w+\\.so\\.\\d\\.\\d\\.\\d"), "libctranslate2.so"),
         RegexBased(Regex("ctranslate2\\.libs/libcudnn-\\w+\\.so\\.\\d\\.\\d\\.\\d"), "libcudnn.so"),
         RegexBased(Regex("ctranslate2\\.libs/libgomp-\\w+\\.so\\.\\d\\.\\d\\.\\d"), "libgomp.so"),
     ),
-    /*Platform("Linux", "aarch64") to listOf(
+    Platform("manylinux_2_17", "aarch64.manylinux2014_aarch64", "Linux", "aarch64") to listOf(
         RegexBased(Regex("ctranslate2\\.libs/libctranslate2-\\w+\\.so\\.\\d\\.\\d\\.\\d"), "libctranslate2.so"),
         RegexBased(Regex("ctranslate2\\.libs/libgomp-\\w+\\.so\\.\\d\\.\\d\\.\\d"), "libgomp.so"),
-    )*/
+    )
 )
 
 tasks {
@@ -92,9 +105,25 @@ tasks {
             if (!versionedDir.asFile.exists())
                 versionedDir.asFile.mkdirs()
 
+            val client = HttpClient.newBuilder()
+                .connectTimeout(5.minutes.toJavaDuration())
+                .build()
+            val request = HttpRequest.newBuilder(URI.create(CT2_INDEX))
+                .GET()
+                .header("Accept", "application/vnd.pypi.simple.v1+json")
+                .build()
+
+            val response = client.send(request, HttpResponse.BodyHandlers.ofString())
+            val json = JsonParser.parseString(response.body())
+                .asJsonObject
+                .getAsJsonArray("files")
+
+            client.close()
+
             for ((platform, fileMatchers) in ct2Files) {
-                val platformDir = versionedDir.dir("${platform.distribution}-${platform.architecture}".lowercase())
-                val file = versionedDir.file("python-wheels-${platform.distribution}-${platform.architecture}.zip").asFile
+                val platformDir = versionedDir.dir("${platform.outputDist}-${platform.outputArch}".lowercase())
+                val file =
+                    versionedDir.file("ctranslate2-${ct2Version}-cp39-cp39-${platform.distribution}_${platform.architecture}.whl").asFile
 
                 if (file.exists())
                     continue
@@ -104,9 +133,15 @@ tasks {
                 if (!platformDir.asFile.exists())
                     platformDir.asFile.mkdirs()
 
-                val url = URI.create(CT2_URL.replace("{dist}", platform.distribution).replace("{arch}", platform.architecture)).toURL()
+                val url = URI.create(
+                    json.first {
+                        it.asJsonObject.get("filename").asString == "ctranslate2-${ct2Version}-cp39-cp39-${platform.distribution}_${platform.architecture}.whl"
+                    }
+                        .asJsonObject.get("url").asString
+                )
+                    .toURL()
 
-                logger.info("Downloading CTranslate2 wheels for ${platform.distribution} (${platform.architecture})...")
+                logger.info("Downloading CTranslate2 wheels for ${platform.outputDist} (${platform.outputArch})...")
                 file.outputStream().use { f ->
                     url.openStream().use {
                         it.transferTo(f)
@@ -115,26 +150,7 @@ tasks {
 
                 logger.info("Finished downloading! Getting required files...")
 
-                lateinit var wheel: File
-                val zip = ZipFile(file)
-                for (entry in zip.entries()) {
-                    if (entry.name.endsWith(".whl")) {
-                        wheel = versionedDir.file(entry.name).asFile
-
-                        if (!wheel.exists()) {
-                            wheel.createNewFile()
-                            zip.getInputStream(entry).use {
-                                wheel.outputStream().use { f ->
-                                    it.transferTo(f)
-                                }
-                            }
-                        }
-
-                        break
-                    }
-                }
-
-                val wheelZip = ZipFile(wheel)
+                val wheelZip = ZipFile(file)
                 for (entry in wheelZip.entries()) {
                     val matchedFile = fileMatchers.firstOrNull { it.match(entry.name) } ?: continue
                     val filePath = platformDir.file(matchedFile.fileName).asFile
