@@ -37,7 +37,7 @@ jobs:
         env:
           MAVEN_USER: ${{ secrets.MAVEN_USER }}
           MAVEN_PASS: ${{ secrets.MAVEN_PASS }}
-  build-windows:
+  build-platform:
     environment: UnityTranslate Build
     runs-on: ${{ matrix.os }}
     strategy:
