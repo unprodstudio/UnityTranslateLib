@@ -130,6 +130,7 @@ tasks {
 
                 if (!platformDir.asFile.exists())
                     platformDir.asFile.mkdirs()
+                println("Downloading: ${"ctranslate2-${ct2Version}-cp39-cp39-${platform.distribution}_${platform.architecture}.whl"}")
 
                 val url = URI.create(
                     json.first {
