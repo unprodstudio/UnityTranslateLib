@@ -118,8 +118,6 @@ tasks {
                 .asJsonObject
                 .getAsJsonArray("files")
 
-            client.close()
-
             for ((platform, fileMatchers) in ct2Files) {
                 val platformDir = versionedDir.dir("${platform.outputDist}-${platform.outputArch}".lowercase())
                 val file =
