@@ -4,6 +4,7 @@ import kotlinx.serialization.json.Json
 import xyz.bluspring.unitytranslate.library.UnityTranslateLib
 import xyz.bluspring.unitytranslate.library.models.ModelInfo
 import xyz.bluspring.unitytranslate.library.models.PackageIndex
+import xyz.bluspring.unitytranslate.library.util.DownloadHelper
 import java.net.URI
 import java.nio.file.Path
 import java.util.zip.ZipFile
@@ -62,6 +63,13 @@ class ArgosPackageIndex(path: Path) : PackageIndex<ArgosPackage>(path, "argos") 
 
     override suspend fun getOrDownloadModelInfo(pkg: ArgosPackage): ModelInfo {
         val pkgDir = path.resolve("${pkg.code}_${pkg.packageVersion}")
+        val downloadId = "argos_${pkg.code}"
+
+        if (DownloadHelper.getDownloadInfo(downloadId) != null) {
+            while (DownloadHelper.getDownloadInfo(downloadId) != null) {
+                // just keep blocking I guess? idk how else to handle this
+            }
+        }
 
         if (pkgDir.exists()) {
             return ModelInfo(
@@ -78,11 +86,8 @@ class ArgosPackageIndex(path: Path) : PackageIndex<ArgosPackage>(path, "argos") 
             try {
                 val url = URI.create(link).toURL()
                 val zipPath = path.resolve("${pkg.code}_${pkg.packageVersion}.argosmodel")
-                url.openStream().use {
-                    zipPath.outputStream().use { o ->
-                        it.copyTo(o)
-                    }
-                }
+
+                DownloadHelper.download(downloadId, url.openConnection(), zipPath)
 
                 val zipFile = ZipFile(zipPath)
                 for (entry in zipFile.entries()) {
