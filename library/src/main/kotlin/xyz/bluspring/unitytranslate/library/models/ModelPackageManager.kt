@@ -37,9 +37,28 @@ class ModelPackageManager(val library: UnityTranslateLib) {
         return emptyList()
     }
 
-    suspend fun getModelInfos(fromLang: String, toLang: String): Map<out ModelPackage, ModelInfo> {
+    fun getAvailableModelInfos(fromLang: String, toLang: String): Map<out ModelPackage, ModelInfo> {
         for (index in indexList) {
-            val available = index.getOrDownloadModelInfos(fromLang, toLang)
+            val available = index.getAvailableModelInfos(fromLang, toLang)
+            if (available.isNotEmpty())
+                return available
+        }
+
+        return mapOf()
+    }
+
+    fun isModelAvailable(fromLang: String, toLang: String): Boolean {
+        for (index in indexList) {
+            if (index.isModelAvailable(fromLang, toLang))
+                return true
+        }
+
+        return false
+    }
+
+    suspend fun tryDownloadModelInfos(fromLang: String, toLang: String): Map<out ModelPackage, ModelInfo> {
+        for (index in indexList) {
+            val available = index.tryDownloadModelInfos(fromLang, toLang)
             if (available.isNotEmpty())
                 return available
         }
@@ -55,7 +74,7 @@ class ModelPackageManager(val library: UnityTranslateLib) {
     }
 
     suspend fun tryLoadModels(fromCode: String, toCode: String, useCuda: Boolean): Map<String, Long> {
-        val modelInfos = this.getModelInfos(fromCode, toCode)
+        val modelInfos = this.getAvailableModelInfos(fromCode, toCode)
 
         if (modelInfos.isEmpty())
             throw Exception("No translation models available for $fromCode-$toCode!")

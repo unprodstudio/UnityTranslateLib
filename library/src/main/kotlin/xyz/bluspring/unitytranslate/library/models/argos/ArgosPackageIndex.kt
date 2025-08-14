@@ -1,13 +1,18 @@
 package xyz.bluspring.unitytranslate.library.models.argos
 
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.decodeFromStream
 import xyz.bluspring.unitytranslate.library.UnityTranslateLib
 import xyz.bluspring.unitytranslate.library.models.ModelInfo
 import xyz.bluspring.unitytranslate.library.models.PackageIndex
 import xyz.bluspring.unitytranslate.library.util.DownloadHelper
+import java.io.InputStream
 import java.net.URI
 import java.nio.file.Path
 import java.util.zip.ZipFile
+import kotlin.io.path.exists
+import kotlin.io.resolve
 import kotlin.time.Duration.Companion.days
 
 class ArgosPackageIndex(path: Path) : PackageIndex<ArgosPackage>(path, "argos") {
@@ -19,22 +24,25 @@ class ArgosPackageIndex(path: Path) : PackageIndex<ArgosPackage>(path, "argos") 
 
     override fun loadIndex() {
         val url = URI.create(PACKAGE_INDEX_URL).toURL()
-        val text = url.readText(Charsets.UTF_8)
-        loadIndexFromString(text)
+        url.openStream().use { loadIndexFromStream(it, true) }
 
-        val cachedFile = path.resolve("index.json")
-        if (!cachedFile.exists())
-            cachedFile.createNewFile()
-
-        cachedFile.writeText(text, Charsets.UTF_8)
         lastIndexTime = System.currentTimeMillis()
     }
 
-    private fun loadIndexFromString(data: String) {
-        val indexData = json.decodeFromString<List<ArgosPackage>>(data)
+    @OptIn(ExperimentalSerializationApi::class)
+    private fun loadIndexFromStream(stream: InputStream, cache: Boolean = false) {
+        val indexData = json.decodeFromStream<List<ArgosPackage>>(stream)
 
         this.packages.clear()
         this.packages.addAll(indexData)
+
+        if (cache) {
+            val cachedFile = path.resolve("index.json")
+            if (!cachedFile.exists())
+                cachedFile.createNewFile()
+
+            cachedFile.writeText(json.encodeToString(indexData), Charsets.UTF_8)
+        }
     }
 
     override fun loadIndexOrCache() {
@@ -50,18 +58,32 @@ class ArgosPackageIndex(path: Path) : PackageIndex<ArgosPackage>(path, "argos") 
                 loadIndex()
             } catch (e: Exception) {
                 if (cachedFile.exists())
-                    loadIndexFromString(cachedFile.readText(Charsets.UTF_8))
+                    cachedFile.inputStream().use { loadIndexFromStream(it) }
                 else {
                     UnityTranslateLib.logger.debug("Failed to update Argos index, and no cached index could be found! $e")
                     e.printStackTrace()
                 }
             }
         } else if (cachedFile.exists()) {
-            loadIndexFromString(cachedFile.readText(Charsets.UTF_8))
+            cachedFile.inputStream().use { loadIndexFromStream(it) }
         }
     }
 
-    override suspend fun getOrDownloadModelInfo(pkg: ArgosPackage): ModelInfo {
+    override fun getAvailableModelInfo(pkg: ArgosPackage): ModelInfo? {
+        val pkgDir = path.resolve("${pkg.code}_${pkg.packageVersion}")
+        val downloadId = "argos_${pkg.code}"
+
+        // A download is running, so it's not available at the moment.
+        if (DownloadHelper.getDownloadInfo(downloadId) != null)
+            return null
+
+        if (pkgDir.exists())
+            return createModelInfo(pkg, pkgDir.toPath())
+
+        return null
+    }
+
+    override suspend fun tryDownloadModelInfo(pkg: ArgosPackage): ModelInfo {
         val pkgDir = path.resolve("${pkg.code}_${pkg.packageVersion}")
         val downloadId = "argos_${pkg.code}"
 
@@ -72,12 +94,7 @@ class ArgosPackageIndex(path: Path) : PackageIndex<ArgosPackage>(path, "argos") 
         }
 
         if (pkgDir.exists()) {
-            return ModelInfo(
-                pkg.code,
-                pkgDir.resolve("model").toPath(),
-                pkgDir.resolve("bpe.model").run { if (this.exists()) this else null }?.toPath(),
-                pkgDir.resolve("sentencepiece.model").run { if (this.exists()) this else null }?.toPath()
-            )
+            return createModelInfo(pkg, pkgDir.toPath())
         }
 
         val exception = RuntimeException("Failed to download Argos models for ${pkg.code} v${pkg.packageVersion}!")
@@ -108,18 +125,22 @@ class ArgosPackageIndex(path: Path) : PackageIndex<ArgosPackage>(path, "argos") 
 
                 zipPath.delete()
 
-                return ModelInfo(
-                    pkg.code,
-                    pkgDir.resolve("model").toPath(),
-                    pkgDir.resolve("bpe.model").run { if (this.exists()) this else null }?.toPath(),
-                    pkgDir.resolve("sentencepiece.model").run { if (this.exists()) this else null }?.toPath()
-                )
+                return createModelInfo(pkg, pkgDir.toPath())
             } catch (e: Exception) {
                 exception.addSuppressed(RuntimeException("Failed to download from URL $link", e))
             }
         }
 
         throw exception
+    }
+
+    private fun createModelInfo(pkg: ArgosPackage, pkgDir: Path): ModelInfo {
+        return ModelInfo(
+            pkg.code,
+            pkgDir.resolve("model"),
+            pkgDir.resolve("bpe.model").run { if (this.exists()) this else null },
+            pkgDir.resolve("sentencepiece.model").run { if (this.exists()) this else null }
+        )
     }
 
     companion object {

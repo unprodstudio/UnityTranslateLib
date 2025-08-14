@@ -12,16 +12,58 @@ abstract class PackageIndex<T : ModelPackage>(path: Path, val name: String) {
 
     abstract fun loadIndex()
     abstract fun loadIndexOrCache()
-    abstract suspend fun getOrDownloadModelInfo(pkg: T): ModelInfo
 
-    open suspend fun getOrDownloadModelInfos(fromLang: String, toLang: String): Map<T, ModelInfo> {
+    abstract fun getAvailableModelInfo(pkg: T): ModelInfo?
+    abstract suspend fun tryDownloadModelInfo(pkg: T): ModelInfo
+
+    open fun isModelAvailable(fromLang: String, toLang: String): Boolean {
+        val packages = this.getTranslationPackage(fromLang, toLang)
+        if (packages.isEmpty())
+            return false
+
+        for (pkg in packages) {
+            if (getAvailableModelInfo(pkg) == null)
+                return false
+        }
+
+        return true
+    }
+
+    open fun getAvailableModelInfos(fromLang: String, toLang: String): Map<T, ModelInfo> {
         val packages = this.getTranslationPackage(fromLang, toLang)
         if (packages.isEmpty())
             return mapOf()
 
         val modelInfos = mutableMapOf<T, ModelInfo>()
         for (pkg in packages) {
-            modelInfos[pkg] = getOrDownloadModelInfo(pkg)
+            modelInfos[pkg] = getAvailableModelInfo(pkg) ?: continue
+        }
+
+        return modelInfos
+    }
+
+    open fun getUnavailablePackages(fromLang: String, toLang: String): List<T> {
+        val packages = this.getTranslationPackage(fromLang, toLang)
+        if (packages.isEmpty())
+            return emptyList()
+
+        val unavailable = mutableListOf<T>()
+        for (pkg in packages) {
+            if (getAvailableModelInfo(pkg) == null)
+                unavailable.add(pkg)
+        }
+
+        return unavailable
+    }
+
+    open suspend fun tryDownloadModelInfos(fromLang: String, toLang: String): Map<T, ModelInfo> {
+        val packages = this.getTranslationPackage(fromLang, toLang)
+        if (packages.isEmpty())
+            return mapOf()
+
+        val modelInfos = mutableMapOf<T, ModelInfo>()
+        for (pkg in packages) {
+            modelInfos[pkg] = tryDownloadModelInfo(pkg)
         }
 
         return modelInfos
