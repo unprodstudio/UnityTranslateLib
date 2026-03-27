@@ -1,6 +1,7 @@
 // Ported from https://github.com/UnityMultiplayer/UnityTranslateLib/blob/master/library/src/main/kotlin/xyz/bluspring/unitytranslate/library/util/BPETokenizer.kt
 // which was ported from argos-translate's apply_bpe.py - https://github.com/argosopentech/argos-translate/blob/master/argostranslate/apply_bpe.py
 // and from SacreMoses' tokenize.py - https://github.com/hplt-project/sacremoses/blob/master/sacremoses/tokenize.py
+// which is itself ported from Moses' tokenizer.perl and detokenizer.perl - https://github.com/moses-smt/mosesdecoder/blob/master/scripts/tokenizer/tokenizer.perl & https://github.com/moses-smt/mosesdecoder/blob/master/scripts/tokenizer/detokenizer.perl
 /*
 Copyright (c) 2004-2020 Joerg Tiedemann
 
@@ -34,6 +35,7 @@ Proceedings of the 54th Annual Meeting of the Association for Computational Ling
 
 #include <set>
 #include <sstream>
+#include <utility>
 #include <vector>
 #include <chrono>
 #include <ctime>
@@ -42,6 +44,7 @@ Proceedings of the 54th Annual Meeting of the Association for Computational Ling
 #include "boost/compute/detail/lru_cache.hpp"
 #include "bpe_props.hpp"
 #include "bpe_tokenizer.hpp"
+#include "utils.cpp"
 #include <re2/re2.h>
 
 using namespace std;
@@ -49,44 +52,44 @@ using namespace std;
 regex DASH_REGEX("^[--]$");
 regex MAIL_REGEX("(?i)^li$||^mail.*");
 
-BPETokenizer::BPETokenizer(string toLang, string codes) : cache(50 * 1024 * 1024) /* 50 MB cache */ {
+BPETokenizer::BPETokenizer(string toLang, const string& codes) : cache(50 * 1024 * 1024) /* 50 MB cache */ {
     vector<pair<string, string>> bpeCodes;
     string versionPrefix = "#version:";
-    string version = "0.1";
+    string currentVersion = "0.1";
 
     istringstream codesStream(codes);
 
     string current;
     while (getline(codesStream, current)) {
         if (current.rfind(versionPrefix, 0) == 0) { // Set current version
-            version = current.substr(versionPrefix.length());
+            currentVersion = current.substr(versionPrefix.length());
             continue;
         }
 
         // Add codes
-        size_t pos = current.find(" ");
+        size_t pos = current.find(' ');
         string firstCode = current.substr(0, pos);
         string secondCode = current.substr(pos + 1);
 
-        bpeCodes.push_back(make_pair(firstCode, secondCode));
+        bpeCodes.emplace_back(firstCode, secondCode);
     }
 
     this->codes = bpeCodes;
-    this->toLang = toLang;
-    this->version = version;
+    this->toLang = std::move(toLang);
+    this->version = currentVersion;
 };
 
-vector<string> BPETokenizer::segmentTokens(vector<string> tokens) {
+vector<string> BPETokenizer::segmentTokens(const vector<string>& tokens) {
     vector<string> output;
 
-    for (const string word : tokens) {
+    for (const string& word : tokens) {
         // Eliminate double spaces
         string wordCopy = word;
         boost::trim(wordCopy);
-        if (wordCopy.length() == 0)
+        if (wordCopy.empty())
             continue;
 
-        for (const string newWord : this->encode(word)) {
+        for (const string& newWord : this->encode(word)) {
             output.push_back(newWord);
         }
     }
@@ -106,21 +109,22 @@ vector<string> BPETokenizer::encode(string input) {
             word.push_back(part);
         }
 
-        word.push_back("</w>");
+        word.emplace_back("</w>");
     } else if (this->version.starts_with("0.2")) {
         for (const char c : input.substr(0, input.length() - 1)) {
             string part(1, c);
             word.push_back(part);
         }
 
-        word.push_back(input[input.length() - 1] + "</w>");
+        string combined(1, input[input.length() - 1]);
+        word.emplace_back(combined + "</w>");
     } else {
-        throw "Unsupported BPE version: " + this->version;
+        throw runtime_error("Unsupported BPE version: " + this->version);
     }
 
     vector<pair<string, string>> pairs = createPairs(input);
 
-    if (pairs.size() == 0) {
+    if (pairs.empty()) {
         vector<string> output;
         output.push_back(input);
         this->cache.insert(input, output);
@@ -132,7 +136,7 @@ vector<string> BPETokenizer::encode(string input) {
         pair<string, string> bigram = minPair(pairs);
                 
         // If the bigram doesn't exist, just exit.
-        if (this->codes.empty() || find(this->codes.begin(), this->codes.end(), bigram) == this->codes.end()) {
+        if (this->codes.empty() || ranges::find(this->codes, bigram) == this->codes.end()) {
             break;
         }
 
@@ -143,9 +147,7 @@ vector<string> BPETokenizer::encode(string input) {
         int i = 0;
 
         while (i < word.size()) {
-            int j = find(word.begin(), word.end(), first) - word.begin();
-
-            if (j == -1) {
+            if (int j = find(word.begin(), word.end(), first) - word.begin(); j == -1) {
                 for (int pos = i; pos <= word.size(); pos++) {
                     newWord.push_back(word[pos]);
                 }
@@ -168,14 +170,13 @@ vector<string> BPETokenizer::encode(string input) {
 
         if (word.size() == 1) {
             break;
-        } else {
-            string joined = boost::algorithm::join(word, "");
-            pairs = createPairs(joined);
         }
+
+        string joined = boost::algorithm::join(word, "");
+        pairs = createPairs(joined);
     }
 
-    string last = word[word.size() - 1];
-    if (last == "</w>") {
+    if (string last = word[word.size() - 1]; last == "</w>") {
         word.resize(word.size() - 1);
     } else if (last.ends_with("</w>")) {
         word.resize(word.size() - 1);
@@ -191,8 +192,8 @@ string BPETokenizer::decode(vector<string> const tokens) {
     string newString = joined;
     replace(newString, "@@ ", "");
 
-    vector<string> splitTokens = split(newString, " ");
-            
+    const vector<string> splitTokens = split(newString, " ");
+
     regex regexp = BPEProps::AGGRESSIVE_HYPHEN_SPLIT.first;
     string substitution = BPEProps::AGGRESSIVE_HYPHEN_SPLIT.second;
     string text = " " + boost::algorithm::join(splitTokens, " ") + " ";
@@ -200,7 +201,7 @@ string BPETokenizer::decode(vector<string> const tokens) {
     text = BPEProps::unescapeXml(text);
 
     string prependSpace = " ";
-    string detokenizedText = "";
+    string detokenizedText;
 
     vector<string> textTokens = split(text, " ");
     string lang = this->toLang;
@@ -215,7 +216,7 @@ string BPETokenizer::decode(vector<string> const tokens) {
 
     int i = 0;
 
-    /*for (const string token : textTokens) {
+    for (const string& token : textTokens) {
         if (BPEProps::isCJK(token.at(0)) && lang != "ko") {
             if (i > 0 && BPEProps::isCJK(last(splitTokens.at(i - 1)))) {
                 detokenizedText += token;
@@ -225,12 +226,12 @@ string BPETokenizer::decode(vector<string> const tokens) {
             }
 
             prependSpace = " ";
-        } else if (regex_match(token, BPEProps::IS_CURRENCY_SYMBOL)) {
+        } else if (RE2::PartialMatch(token, BPEProps::IS_CURRENCY_SYMBOL)) {
             detokenizedText += prependSpace;
             detokenizedText += token;
             prependSpace = " ";
-        } else if (regex_match(token, BPEProps::IS_PUNCT)) {
-            if (lang == "fr" && regex_match(token, BPEProps::SYMBOLS)) {
+        } else if (RE2::PartialMatch(token, BPEProps::IS_PUNCT)) {
+            if (lang == "fr" && RE2::PartialMatch(token, BPEProps::SYMBOLS)) {
                 detokenizedText += " ";
             }
 
@@ -256,9 +257,9 @@ string BPETokenizer::decode(vector<string> const tokens) {
             detokenizedText += splitTokens.at(i + 1);
 
             prependSpace = "";
-        } else if (regex_match(token, BPEProps::IS_OPEN_QUOTE)) {
+        } else if (RE2::PartialMatch(token, BPEProps::IS_OPEN_QUOTE)) {
             string normalizedQuo = token;
-            if (regex_match(token, BPEProps::OPEN_QUOTES)) {
+            if (RE2::PartialMatch(token, BPEProps::OPEN_QUOTES)) {
                 normalizedQuo = "\"";
             }
 
@@ -276,7 +277,7 @@ string BPETokenizer::decode(vector<string> const tokens) {
             }
 
             if (!quoteCounts.contains(normalizedQuo) || quoteCounts.at(normalizedQuo) % 2 == 0) {
-                if (lang == "en" && token == "'" && i > 0 && regex_match(splitTokens.at(i - 1), BPEProps::S_END)) {
+                if (lang == "en" && token == "'" && i > 0 && RE2::PartialMatch(splitTokens.at(i - 1), BPEProps::S_END)) {
                     detokenizedText += token;
                     prependSpace = " ";
                 } else {
@@ -295,7 +296,7 @@ string BPETokenizer::decode(vector<string> const tokens) {
                 else
                     quoteCounts.insert_or_assign(normalizedQuo, 1);
             }
-        } else if (lang == "fi" && regex_match(splitTokens.at(i - 1), BPEProps::COLON) && regex_match(token, BPEProps::FINNISH_REGEX)) {
+        } else if (lang == "fi" && RE2::PartialMatch(splitTokens.at(i - 1), BPEProps::COLON) && RE2::PartialMatch(token, BPEProps::FINNISH_REGEX)) {
             detokenizedText += prependSpace;
             detokenizedText += token;
             prependSpace = " ";
@@ -306,7 +307,7 @@ string BPETokenizer::decode(vector<string> const tokens) {
         }
 
         i += 1;
-    }*/
+    }
 
     detokenizedText = substitute(detokenizedText, BPEProps::ONE_SPACE);
     boost::algorithm::trim_right(detokenizedText);
@@ -314,11 +315,11 @@ string BPETokenizer::decode(vector<string> const tokens) {
     return detokenizedText;
 }
 
-vector<pair<string, string>> BPETokenizer::createPairs(string input) {
+vector<pair<string, string>> BPETokenizer::createPairs(const string &input) {
     vector<pair<string, string>> pairs;
 
     // Avoid an accidental illegal access
-    if (input.length() == 0) {
+    if (input.empty()) {
         return pairs;
     }
 
@@ -335,11 +336,11 @@ vector<pair<string, string>> BPETokenizer::createPairs(string input) {
     return pairs;
 }
 
-pair<string, string> BPETokenizer::minPair(vector<pair<string, string>> input) {
+pair<string, string> BPETokenizer::minPair(const vector<pair<string, string>>& input) {
     int currentKey = numeric_limits<int>::max();
     pair<string, string> min("", "");
 
-    for (const pair<string, string> pair : input) {
+    for (const pair<string, string>& pair : input) {
         int key = find(this->codes.begin(), this->codes.end(), pair) - this->codes.begin();
         if (key >= this->codes.size()) {
             key = numeric_limits<int>::max();
@@ -355,7 +356,7 @@ pair<string, string> BPETokenizer::minPair(vector<pair<string, string>> input) {
 }
 
 bool BPETokenizer::replace(std::string& str, const std::string& from, const std::string& to) {
-    size_t start_pos = str.find(from);
+    const size_t start_pos = str.find(from);
     if (start_pos == std::string::npos)
         return false;
 
@@ -363,7 +364,7 @@ bool BPETokenizer::replace(std::string& str, const std::string& from, const std:
     return true;
 }
 
-char BPETokenizer::last(string input) {
+char BPETokenizer::last(const string &input) {
     return input[input.length() - 1];
 }
 

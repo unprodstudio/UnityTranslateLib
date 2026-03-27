@@ -10,9 +10,9 @@ class SentencePieceTokenizer : public Tokenizer {
     public:
         sentencepiece::SentencePieceProcessor *processor;
 
-        SentencePieceTokenizer(sentencepiece::SentencePieceProcessor *processor);
+        explicit SentencePieceTokenizer(sentencepiece::SentencePieceProcessor *processor);
 
-        vector<string> encode(string input);
-        string decode(vector<string> const tokens);
-        void freeTokenizer();
+        vector<string> encode(string input) override;
+        string decode(vector<string> tokens) override;
+        void freeTokenizer() override;
 };

@@ -14,7 +14,7 @@
 #endif
 
 extern "C" {
-    __export UnityTranslateLibInstance* createInstance(char* toLang, char* translatorModelPath, TokenizerType type, char* tokenizerModelPath, bool useCuda) {
+    __export UnityTranslateLibInstance* createInstance(const char* toLang, const char* translatorModelPath, TokenizerType type, char* tokenizerModelPath, bool useCuda) {
         Tokenizer* tokenizer;
 
         // Load based on tokenizer type
@@ -37,7 +37,7 @@ extern "C" {
 
                 codes.assign((istreambuf_iterator<char>(bpeModelFile)), istreambuf_iterator<char>());
             } else {
-                throw "Could not open BPE model file for reading!";
+                throw runtime_error("Could not open BPE model file for reading!");
             }
 
             bpeModelFile.close();
@@ -46,7 +46,7 @@ extern "C" {
             tokenizer = &bpeTokenizer;
         } else {
             // I'd imagine we'd somehow get here.
-            throw "Invalid tokenizer type!";
+            throw runtime_error("Invalid tokenizer type!");
         }
 
         // Initialize translator
@@ -63,15 +63,19 @@ extern "C" {
         ctranslate2::ReplicaPoolConfig config;
         ctranslate2::Translator translator(modelLoader, config);
 
+        UnityTranslateLibInstance* instancePtr;
+        instancePtr = static_cast<UnityTranslateLibInstance*>(malloc(sizeof(UnityTranslateLibInstance)));
+
         // Now we initialize everything.
-        UnityTranslateLibInstance instance;
+        UnityTranslateLibInstance instance{};
         instance.tokenizer = tokenizer;
         instance.translator = &translator;
+        *instancePtr = instance;
 
-        return &instance;
+        return instancePtr;
     }
 
-    __export const char** batchTranslate(UnityTranslateLibInstance* instance, const char** textToTranslate, int arrayLength) {
+    __export void batchTranslate(const UnityTranslateLibInstance* instance, const char** textToTranslate, const int arrayLength, const char** results) {
         vector<vector<string>> tokenizedTexts;
 
         for (int i = 0; i < arrayLength; i++) {
@@ -81,7 +85,7 @@ extern "C" {
         }
 
         // Recreate Argos Translate's behaviour
-        int numHypotheses = 4;
+        constexpr int numHypotheses = 4;
 
         ctranslate2::TranslationOptions options;
         options.replace_unknowns = true;
@@ -90,18 +94,15 @@ extern "C" {
         options.length_penalty = 0.2;
         options.return_scores = true;
 
-        vector<ctranslate2::TranslationResult> translationResult = instance->translator->translate_batch(tokenizedTexts, options);
-        vector<const char*> results;
+        const vector<ctranslate2::TranslationResult> translationResult = instance->translator->translate_batch(tokenizedTexts, options);
 
         for (int i = 0; i < arrayLength; i++) {
             ctranslate2::TranslationResult result = translationResult.at(i);
-            vector<string> tokens = result.output();
+            const vector<string>& tokens = result.output();
             string parsed = instance->tokenizer->decode(tokens);
 
-            results.push_back(parsed.c_str());
+            results[i] = parsed.c_str();
         }
-
-        return results.data();
     }
 
     __export void freeInstance(UnityTranslateLibInstance* instance) {

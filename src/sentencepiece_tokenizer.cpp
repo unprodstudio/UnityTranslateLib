@@ -12,9 +12,8 @@ SentencePieceTokenizer::SentencePieceTokenizer(sentencepiece::SentencePieceProce
 
 vector<string> SentencePieceTokenizer::encode(string input) {
     vector<string> pieces;
-    sentencepiece::util::Status status = this->processor->Encode(input, &pieces);
 
-    if (!status.ok()) {
+    if (const sentencepiece::util::Status status = this->processor->Encode(input, &pieces); !status.ok()) {
         const string error = status.error_message();
         printf("Failed to encode: %s", error.c_str());
     }
@@ -24,10 +23,9 @@ vector<string> SentencePieceTokenizer::encode(string input) {
 
 string SentencePieceTokenizer::decode(vector<string> const tokens) {
     string result;
-    sentencepiece::util::Status status = this->processor->Decode(tokens, &result);
 
-    if (!status.ok()) {
-        string error = status.error_message();
+    if (const sentencepiece::util::Status status = this->processor->Decode(tokens, &result); !status.ok()) {
+        const string error = status.error_message();
         printf("Failed to decode: %s", error.c_str());
     }
     

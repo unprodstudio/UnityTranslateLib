@@ -12,16 +12,19 @@ class BPETokenizer : public Tokenizer {
         vector<pair<string, string>> codes;
         string version;
 
-        BPETokenizer(string toLang, string codes);
-        vector<string> segmentTokens(vector<string> tokens);
-        vector<string> encode(string input);
-        string decode(vector<string> const tokens);
-        void freeTokenizer();
+        BPETokenizer(string toLang, const string& codes);
+        vector<string> segmentTokens(const vector<string>& tokens);
+        vector<string> encode(string input) override;
+        string decode(vector<string> tokens) override;
+        void freeTokenizer() override;
 
     private:
         boost::compute::detail::lru_cache<string, vector<string>> cache;
-        vector<pair<string, string>> createPairs(string input);
-        pair<string, string> minPair(vector<pair<string, string>> input);
-        bool replace(std::string& str, const std::string& from, const std::string& to);
-        char last(string input);
+
+        static vector<pair<string, string>> createPairs(const string &input);
+        pair<string, string> minPair(const vector<pair<string, string>>& input);
+
+        static bool replace(std::string& str, const std::string& from, const std::string& to);
+
+        static char last(const string &input);
 };

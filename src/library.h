@@ -26,12 +26,12 @@ __export enum TokenizerType {
 /**
  * Used for creating a new UnityTranslateLib instance.
  */
-__export UnityTranslateLibInstance* createInstance(char* toLang, char* translatorModelPath, TokenizerType type, char* tokenizerModelPath, bool useCuda);
+__export UnityTranslateLibInstance* createInstance(const char* toLang, const char* translatorModelPath, TokenizerType type, char* tokenizerModelPath, bool useCuda);
 
 /**
  * 
  */
-__export const char** batchTranslate(UnityTranslateLibInstance* instance, const char** textToTranslate, int arrayLength);
+__export void batchTranslate(const UnityTranslateLibInstance* instance, const char** textToTranslate, int arrayLength, const char** results);
 
 /**
  * Used for freeing the UnityTranslateLib instance pointers. Must be called for closing the translator.

@@ -168,8 +168,7 @@ target_link_directories(UnityTranslateLibV3 PRIVATE
     C:/Users/Naz/AppData/Local/.xmake/packages/a/abseil/20260107.0/1f93825a0a7543abbbb8b9a95c5c7527/lib
 )
 # private sourcefiles from sourcebatch c++.build for target UnityTranslateLibV3
-target_sources(UnityTranslateLibV3 PRIVATE 
-    src/bpe_props.cpp
+target_sources(UnityTranslateLibV3 PRIVATE
     src/bpe_tokenizer.cpp
     src/library.cpp
     src/sentencepiece_tokenizer.cpp
