@@ -19,7 +19,7 @@ abstract class XmakeCompileTask : Exec() {
         commandLine("xmake", "f", "-y", "-c", "-p", platform, "-a", arch, "-m", "release")
         commandLine.addAll(extraArgs)
         super.exec()
-        commandLine("xmake", "-y")
+        commandLine("xmake", "install", "-y", "-o", "build/install/$platform/$arch")
         super.exec()
     }
 }
