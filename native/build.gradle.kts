@@ -1,4 +1,0 @@
-base {
-    archivesName.set("UnityTranslateLib")
-}
-
