@@ -44,7 +44,7 @@ Proceedings of the 54th Annual Meeting of the Association for Computational Ling
 #include "boost/compute/detail/lru_cache.hpp"
 #include "bpe_props.hpp"
 #include "bpe_tokenizer.hpp"
-#include "utils.cpp"
+#include "utils.hpp"
 #include <re2/re2.h>
 
 using namespace std;

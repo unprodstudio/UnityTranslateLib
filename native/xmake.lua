@@ -3,6 +3,7 @@ add_requires("sentencepiece v0.2.1", {configs = {shared = true}})
 add_requires("ctranslate2 v4.6.2", {configs = {shared = true}})
 add_requires("boost 1.90.0", {configs = {shared = true}})
 add_requires("re2 2025.11.05", {configs = {shared = true}})
+add_requires("jnipp v1.0.0")
 add_rules("mode.debug", "mode.release")
 
 -- We need to re-enable shared libraries, hence why we do this here.
@@ -58,19 +59,25 @@ package("sentencepiece")
 package("ctranslate2")
 	add_urls(--"https://github.com/OpenNMT/CTranslate2/archive/refs/tags/$(version).tar.gz",
 			 "https://github.com/OpenNMT/CTranslate2.git")
-	add_versions("v4.6.2", "840d4a52545c3ce3aaf54f53306b8350febbcdbe6dd6c4327a9f6311556db631") -- SHA256
+	add_versions("v4.7.1", "64beb499c1e33500a691dfbe10cc5def7b914413c7f7c2830b0e0d8d544a9f7e") -- SHA256
 	add_deps("cmake", {configs = {shared = true}})
 	on_install(function (package)
         local configs = {}
         table.insert(configs, "-DCMAKE_BUILD_TYPE=" .. (package:debug() and "Debug" or "Release"))
         table.insert(configs, "-DBUILD_SHARED_LIBS=" .. (package:config("shared") and "ON" or "OFF"))
+        table.insert(configs, "-DWITH_CUDA=ON")
+        --table.insert(configs, "-DWITH_CUDNN=ON")
+        --table.insert(configs, "-DWITH_ACCELERATE=ON")
+        table.insert(configs, "-DCUDA_DYNAMIC_LOADING=ON")
+        table.insert(configs, "-DWITH_HIP=ON")
+        table.insert(configs, "-DWITH_DNNL=ON")
         import("package.tools.cmake").install(package, configs)
     end)
 
-target("UnityTranslateLibV3")
+target("UnityTranslateLib")
     set_kind("shared")
     add_files("src/*.cpp")
-    add_packages("sentencepiece", "ctranslate2", "boost", "re2")
+    add_packages("sentencepiece", "ctranslate2", "boost", "re2", "jnipp")
 
 --
 -- If you want to known more usage about xmake, please see https://xmake.io

@@ -5,60 +5,64 @@
 # project
 cmake_minimum_required(VERSION 3.15.0)
 cmake_policy(SET CMP0091 NEW)
-project(UnityTranslateLibV3 LANGUAGES CXX)
+project(UnityTranslateLib LANGUAGES CXX)
 set(CURRENT_COMPILER_ID ${CMAKE_CXX_COMPILER_ID})
 
 # target
-add_library(UnityTranslateLibV3 SHARED "")
-set_target_properties(UnityTranslateLibV3 PROPERTIES OUTPUT_NAME "UnityTranslateLibV3")
-set_target_properties(UnityTranslateLibV3 PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build/windows/x64/release")
-set_target_properties(UnityTranslateLibV3 PROPERTIES ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build/windows/x64/release")
-target_include_directories(UnityTranslateLibV3 SYSTEM PRIVATE
-    C:/Users/Naz/AppData/Local/.xmake/packages/s/sentencepiece/v0.2.1/25348686b73148efa659fe31d1e52efe/include
+add_library(UnityTranslateLib SHARED "")
+set_target_properties(UnityTranslateLib PROPERTIES OUTPUT_NAME "UnityTranslateLib")
+set_target_properties(UnityTranslateLib PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build/windows/x64/release")
+set_target_properties(UnityTranslateLib PROPERTIES ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build/windows/x64/release")
+target_include_directories(UnityTranslateLib SYSTEM PRIVATE
+    C:/Users/Naz/AppData/Local/.xmake/packages/s/sentencepiece/v0.2.1/2ef8435253854d198e8c8904f568b642/include
     C:/Users/Naz/AppData/Local/.xmake/packages/g/gperftools/2.16/547a66d79e944d26bd048f0917cb7d7c/include
-    C:/Users/Naz/AppData/Local/.xmake/packages/c/ctranslate2/v4.6.2/98ae69e73c8d4a13842ed7e87b2538b2/include
-    C:/Users/Naz/AppData/Local/.xmake/packages/b/boost/1.90.0/b4ab2e367e6a400a8fa697e61681b424/include
-    C:/Users/Naz/AppData/Local/.xmake/packages/r/re2/2025.11.05/cc5d3b0b3e3a4c81a54ff4311aa0acb0/include
+    C:/Users/Naz/AppData/Local/.xmake/packages/c/ctranslate2/v4.6.2/b40ce8b80f0449248b45b9fbf1bcfe6e/include
+    C:/Users/Naz/AppData/Local/.xmake/packages/b/boost/1.90.0/06c240c3198748b885f678a74289d7e9/include
+    C:/Users/Naz/AppData/Local/.xmake/packages/r/re2/2025.11.05/3ead5a7197e146b1bf9a2836535612ad/include
     C:/Users/Naz/AppData/Local/.xmake/packages/a/abseil/20260107.0/1f93825a0a7543abbbb8b9a95c5c7527/include
+    C:/Users/Naz/AppData/Local/.xmake/packages/j/jnipp/v1.0.0/982bd4fd3dfa45d5b8fcabe9e7b1c7c1/include
+    C:/Users/Naz/AppData/Local/.xmake/packages/o/openjdk/21.0.5/de2a601584384cd08a6ac560aa2e5721/include
+    C:/Users/Naz/AppData/Local/.xmake/packages/o/openjdk/21.0.5/de2a601584384cd08a6ac560aa2e5721/include/win32
 )
-target_compile_definitions(UnityTranslateLibV3 PRIVATE
+target_compile_definitions(UnityTranslateLib PRIVATE
     PERFTOOLS_DLL_DECL=
     BOOST_ALL_NO_LIB
+    BOOST_ALL_DYN_LINK
 )
-target_compile_options(UnityTranslateLibV3 PRIVATE
+target_compile_options(UnityTranslateLib PRIVATE
     $<$<COMPILE_LANGUAGE:C>:-DNDEBUG>
     $<$<COMPILE_LANGUAGE:CXX>:-DNDEBUG>
     $<$<COMPILE_LANGUAGE:CUDA>:-DNDEBUG>
 )
 if(CURRENT_COMPILER_ID STREQUAL "MSVC")
-    target_compile_options(UnityTranslateLibV3 PRIVATE /EHsc)
+    target_compile_options(UnityTranslateLib PRIVATE /EHsc)
 elseif(CURRENT_COMPILER_ID STREQUAL "Clang")
-    target_compile_options(UnityTranslateLibV3 PRIVATE -fexceptions)
-    target_compile_options(UnityTranslateLibV3 PRIVATE -fcxx-exceptions)
+    target_compile_options(UnityTranslateLib PRIVATE -fexceptions)
+    target_compile_options(UnityTranslateLib PRIVATE -fcxx-exceptions)
 elseif(CURRENT_COMPILER_ID STREQUAL "GNU")
-    target_compile_options(UnityTranslateLibV3 PRIVATE -fexceptions)
+    target_compile_options(UnityTranslateLib PRIVATE -fexceptions)
 endif()
-set_target_properties(UnityTranslateLibV3 PROPERTIES C_EXTENSIONS OFF)
-target_compile_features(UnityTranslateLibV3 PRIVATE c_std_23)
-set_target_properties(UnityTranslateLibV3 PROPERTIES CXX_EXTENSIONS OFF)
-target_compile_features(UnityTranslateLibV3 PRIVATE cxx_std_23)
+set_target_properties(UnityTranslateLib PROPERTIES C_EXTENSIONS OFF)
+target_compile_features(UnityTranslateLib PRIVATE c_std_23)
+set_target_properties(UnityTranslateLib PROPERTIES CXX_EXTENSIONS OFF)
+target_compile_features(UnityTranslateLib PRIVATE cxx_std_23)
 if(CURRENT_COMPILER_ID STREQUAL "MSVC")
-    target_compile_options(UnityTranslateLibV3 PRIVATE $<$<CONFIG:Release>:-O2>)
+    target_compile_options(UnityTranslateLib PRIVATE $<$<CONFIG:Release>:-O2>)
 else()
-    target_compile_options(UnityTranslateLibV3 PRIVATE -O3)
+    target_compile_options(UnityTranslateLib PRIVATE -O3)
 endif()
 if(CURRENT_COMPILER_ID STREQUAL "MSVC")
-    set_property(TARGET UnityTranslateLibV3 PROPERTY
+    set_property(TARGET UnityTranslateLib PROPERTY
         MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 endif()
-target_link_libraries(UnityTranslateLibV3 PRIVATE
+target_link_libraries(UnityTranslateLib PRIVATE
     sentencepiece
     sentencepiece_train
     tcmalloc_minimal
     common
     ctranslate2
-    libboost_filesystem
-    libboost_atomic
+    boost_filesystem
+    boost_atomic
     re2
     absl_cordz_sample_token
     absl_die_if_null
@@ -151,6 +155,9 @@ target_link_libraries(UnityTranslateLibV3 PRIVATE
     absl_raw_logging_internal
     absl_spinlock_wait
     absl_log_severity
+    jnipp
+    jawt
+    jvm
     ntdll
     shell32
     advapi32
@@ -159,16 +166,18 @@ target_link_libraries(UnityTranslateLibV3 PRIVATE
     dbghelp
     bcrypt
 )
-target_link_directories(UnityTranslateLibV3 PRIVATE
-    C:/Users/Naz/AppData/Local/.xmake/packages/s/sentencepiece/v0.2.1/25348686b73148efa659fe31d1e52efe/lib
+target_link_directories(UnityTranslateLib PRIVATE
+    C:/Users/Naz/AppData/Local/.xmake/packages/s/sentencepiece/v0.2.1/2ef8435253854d198e8c8904f568b642/lib
     C:/Users/Naz/AppData/Local/.xmake/packages/g/gperftools/2.16/547a66d79e944d26bd048f0917cb7d7c/lib
-    C:/Users/Naz/AppData/Local/.xmake/packages/c/ctranslate2/v4.6.2/98ae69e73c8d4a13842ed7e87b2538b2/lib
-    C:/Users/Naz/AppData/Local/.xmake/packages/b/boost/1.90.0/b4ab2e367e6a400a8fa697e61681b424/lib
-    C:/Users/Naz/AppData/Local/.xmake/packages/r/re2/2025.11.05/cc5d3b0b3e3a4c81a54ff4311aa0acb0/lib
+    C:/Users/Naz/AppData/Local/.xmake/packages/c/ctranslate2/v4.6.2/b40ce8b80f0449248b45b9fbf1bcfe6e/lib
+    C:/Users/Naz/AppData/Local/.xmake/packages/b/boost/1.90.0/06c240c3198748b885f678a74289d7e9/lib
+    C:/Users/Naz/AppData/Local/.xmake/packages/r/re2/2025.11.05/3ead5a7197e146b1bf9a2836535612ad/lib
     C:/Users/Naz/AppData/Local/.xmake/packages/a/abseil/20260107.0/1f93825a0a7543abbbb8b9a95c5c7527/lib
+    C:/Users/Naz/AppData/Local/.xmake/packages/j/jnipp/v1.0.0/982bd4fd3dfa45d5b8fcabe9e7b1c7c1/lib
+    C:/Users/Naz/AppData/Local/.xmake/packages/o/openjdk/21.0.5/de2a601584384cd08a6ac560aa2e5721/lib
 )
-# private sourcefiles from sourcebatch c++.build for target UnityTranslateLibV3
-target_sources(UnityTranslateLibV3 PRIVATE
+# private sourcefiles from sourcebatch c++.build for target UnityTranslateLib
+target_sources(UnityTranslateLib PRIVATE 
     src/bpe_tokenizer.cpp
     src/library.cpp
     src/sentencepiece_tokenizer.cpp
