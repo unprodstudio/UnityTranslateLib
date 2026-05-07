@@ -1,9 +1,6 @@
-import org.gradle.kotlin.dsl.support.uppercaseFirstChar
-
 plugins {
     alias(libs.plugins.kotlin)
     alias(libs.plugins.kotlin.serialization)
-    alias(libs.plugins.shadow)
     `maven-publish`
 }
 
@@ -11,7 +8,7 @@ group = "xyz.bluspring.unitytranslate"
 version = "${rootProject.property("unitytranslate_version")}"
 
 base {
-    archivesName.set("UnityTranslateLib")
+    archivesName.set("unitytranslate-library")
 }
 
 repositories {
@@ -32,82 +29,27 @@ kotlin {
     jvmToolchain(17)
 }
 
-val platforms = listOf(
-    "windows-x64",
-//    "windows-arm64",
-//    "windows-arm64ec",
-    "linux-x86_64",
-    "linux-armv7",
-    "linux-armv7s",
-    "linux-arm64",
-    "mac-x86_64",
-    "mac-arm64"
-)
+val xmake = natives {
+    path = projectDir.toPath().resolve("jni")
+
+    platform("windows", "x64")
+
+    // TODO: fix for every other platform
+//    platform("windows", "arm64")
+//    platform("windows", "arm64ec")
+
+//    platform("linux", "x86_64")
+//    platform("linux", "armv7")
+//    platform("linux", "armv7s")
+//    platform("linux", "arm64")
+
+//    platform("mac", "x86_64")
+//    platform("mac", "arm64")
+}
 
 tasks {
     test {
         useJUnitPlatform()
-    }
-
-    register<XmakeCompileTask>("compileCppWindowsX64") {
-        workingDir("${project.projectDir}/jni")
-        platform = "windows"
-        arch = "x64"
-    }
-
-    // not supported by sentencepiece (gperftools)
-//    register<XmakeCompileTask>("compileCppWindowsArm64") {
-//        workingDir("${project.projectDir}/jni")
-//        platform = "windows"
-//        arch = "arm64"
-//    }
-//
-//    register<XmakeCompileTask>("compileCppWindowsArm64ec") {
-//        workingDir("${project.projectDir}/jni")
-//        platform = "windows"
-//        arch = "arm64ec"
-//    }
-
-    register<XmakeCompileTask>("compileCppLinuxX86_64") {
-        workingDir("${project.projectDir}/jni")
-        platform = "linux"
-        arch = "x86_64"
-    }
-
-    register<XmakeCompileTask>("compileCppLinuxArmv7") {
-        workingDir("${project.projectDir}/jni")
-        platform = "linux"
-        arch = "armv7"
-    }
-
-    register<XmakeCompileTask>("compileCppLinuxArmv7s") {
-        workingDir("${project.projectDir}/jni")
-        platform = "linux"
-        arch = "armv7s"
-    }
-
-    register<XmakeCompileTask>("compileCppLinuxArm64") {
-        workingDir("${project.projectDir}/jni")
-        platform = "linux"
-        arch = "arm64"
-    }
-
-    register<XmakeCompileTask>("compileCppMacX86_64") {
-        workingDir("${project.projectDir}/jni")
-        platform = "macosx"
-        arch = "x86_64"
-    }
-
-    register<XmakeCompileTask>("compileCppMacArm64") {
-        workingDir("${project.projectDir}/jni")
-        platform = "macosx"
-        arch = "arm64"
-    }
-
-    register("compileAllCpp") {
-        dependsOn(platforms.map {
-            "compileCpp" + it.split("-").joinToString("") { b -> b.uppercaseFirstChar() }
-        }.toTypedArray())
     }
 }
 
@@ -124,9 +66,13 @@ publishing {
     publications {
         register("maven", MavenPublication::class) {
             groupId = "xyz.bluspring.unitytranslate"
-            artifactId = "UnityTranslateLib"
+            artifactId = "unitytranslate-library"
             version = "${rootProject.version}"
             from(components.getByName("java"))
+
+            for (platform in xmake.platformTaskNames) {
+                artifact(tasks.getByName("nativesJar$platform"))
+            }
         }
     }
 }

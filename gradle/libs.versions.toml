@@ -1,8 +1,6 @@
 [versions]
 # https://kotlinlang.org/docs/releases.html
 kotlin = "2.3.20"
-# https://github.com/GradleUp/shadow/releases
-shadow = "9.4.0"
 
 slf4j = "2.0.16"
 
@@ -24,4 +22,3 @@ kotlin = ["kotlinx-coroutines-core", "kotlinx-coroutines-core-jvm", "kotlinx-cor
 [plugins]
 kotlin = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
-shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }

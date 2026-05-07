@@ -5,6 +5,11 @@ import org.gradle.work.DisableCachingByDefault
 
 @DisableCachingByDefault
 abstract class XmakeCompileTask : Exec() {
+    companion object {
+        var llvmPath = "C:\\Program Files\\LLVM"
+        var llvmMingWPath = "C:\\llvm-mingw"
+    }
+
     @Input
     var platform: String = "windows"
 
@@ -16,10 +21,13 @@ abstract class XmakeCompileTask : Exec() {
 
     @TaskAction
     override fun exec() {
-        commandLine("xmake", "f", "-y", "-c", "-p", platform, "-a", arch, "-m", "release")
-        commandLine.addAll(extraArgs)
+        val currentOs = OperatingSystem.type
+        val extraArgs = this.extraArgs.toMutableList()
+        var platform = this.platform
+
+        commandLine("xmake", "f", "-y", "-c", "-p", platform, "-a", arch, "-m", "release", *extraArgs.toTypedArray())
         super.exec()
-        commandLine("xmake", "install", "-y", "-o", "build/install/$platform/$arch")
+        commandLine("xmake", "install", "-y", "-o", "build/install/${this.platform}/${this.arch}")
         super.exec()
     }
 }
