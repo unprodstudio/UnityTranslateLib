@@ -28,28 +28,34 @@ class UnityTranslateLib(val path: Path) {
         private val platformLibs: List<String>
             get() {
                 val osName = System.getProperty("os.name").lowercase()
-                val osArch = System.getProperty("os.arch").lowercase()
                 val isWindows = osName.contains("win")
                 val isMac = osName.contains("mac")
 
-                val dir = "unitytranslate/${if (isWindows) "windows" else if (isMac) "osx" else "linux"}-${osArch}"
+                val osArch = System.getProperty("os.arch").lowercase().run {
+                    if (isWindows && this == "amd64")
+                        "x64"
+                    else this
+                }
 
-                return if (osArch == "amd64") {
+                val dir = "unitytranslate/${if (isWindows) "windows" else if (isMac) "osx" else "linux"}/${osArch}"
+
+                return if (osArch == "x64") {
                     if (isWindows)
                         listOf(
-                            "$dir/UnityTranslateLib.dll",
-                            "$dir/ctranslate2.dll",
-                            "$dir/cudnn64_9.dll",
-                            "$dir/libiomp5md.dll"
+                            "$dir/bin/UnityTranslateLib.dll",
+                            "$dir/bin/ctranslate2.dll",
+                            "$dir/bin/re2.dll",
+//                            "$dir/bin/cudnn64_9.dll",
+                            "$dir/bin/libiomp5md.dll",
                         )
                     else if (isMac)
                         listOf()
                     else
                         listOf(
-                            "$dir/libUnityTranslateLib.so",
-                            "$dir/libctranslate2.so",
-                            "$dir/libcudnn.so",
-                            "$dir/libgomp.so"
+                            "$dir/bin/libUnityTranslateLib.so",
+                            "$dir/bin/libctranslate2.so",
+                            "$dir/bin/libcudnn.so",
+                            "$dir/bin/libgomp.so"
                         )
                 } else emptyList()
             }
@@ -79,10 +85,16 @@ class UnityTranslateLib(val path: Path) {
                         }
 
                         val osName = System.getProperty("os.name").lowercase()
-                        val osArch = System.getProperty("os.arch").lowercase()
                         val isWindows = osName.contains("win")
                         val isMac = osName.contains("mac")
-                        val dir = "unitytranslate/${if (isWindows) "windows" else if (isMac) "osx" else "linux"}-${osArch}/"
+
+                        val osArch = System.getProperty("os.arch").lowercase().run {
+                            if (isWindows && this == "amd64")
+                                "x64"
+                            else this
+                        }
+
+                        val dir = "unitytranslate/${if (isWindows) "windows" else if (isMac) "osx" else "linux"}/${osArch}/bin/"
 
                         for (lib in platformLibs.reversed()) {
                             System.load(extractedPath.resolve(lib.removePrefix(dir)).absolutePathString())
@@ -134,7 +146,7 @@ class UnityTranslateLib(val path: Path) {
 
             val unityTranslatePath = tmpDir.resolve(fullLibName)
             if (!unityTranslatePath.exists())
-                throw Exception("Failed to load library files for UnityTranslateLib!")
+                throw Exception("Failed to extract library files for UnityTranslateLib!")
 
             return tmpDir
         }

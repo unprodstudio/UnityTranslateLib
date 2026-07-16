@@ -4,6 +4,7 @@ add_requires("ctranslate2 v4.6.2", {configs = {shared = true}})
 add_requires("boost 1.90.0", {configs = {shared = true}})
 add_requires("re2 2025.11.05", {configs = {shared = true}})
 add_requires("jnipp v1.0.0")
+add_requires("openmp")
 add_rules("mode.debug", "mode.release")
 
 -- We need to re-enable shared libraries, hence why we do this here.
@@ -77,7 +78,7 @@ package("ctranslate2")
 target("UnityTranslateLib")
     set_kind("shared")
     add_files("src/*.cpp")
-    add_packages("sentencepiece", "ctranslate2", "boost", "re2", "jnipp")
+    add_packages("sentencepiece", "ctranslate2", "boost", "re2", "jnipp", "openmp")
 
 --
 -- If you want to known more usage about xmake, please see https://xmake.io

@@ -30,9 +30,12 @@ target_compile_definitions(UnityTranslateLib PRIVATE
     BOOST_ALL_DYN_LINK
 )
 target_compile_options(UnityTranslateLib PRIVATE
+    $<$<COMPILE_LANGUAGE:C>:/openmp>
     $<$<COMPILE_LANGUAGE:C>:-DNDEBUG>
     $<$<COMPILE_LANGUAGE:CXX>:-DNDEBUG>
+    $<$<COMPILE_LANGUAGE:CXX>:/openmp>
     $<$<COMPILE_LANGUAGE:CUDA>:-DNDEBUG>
+    $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler /openmp>
 )
 if(CURRENT_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(UnityTranslateLib PRIVATE /EHsc)
