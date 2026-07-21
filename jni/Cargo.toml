@@ -12,7 +12,6 @@ ct2rs = "0.9.22"
 jni = "0.22.4"
 rust_tokenizers = "8.1.1"
 anyhow = "1.0.104"
-tokenizers = "0.23.1"
 regex = "1.13.1"
 
 [features]

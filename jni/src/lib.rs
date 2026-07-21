@@ -8,7 +8,7 @@ use jni::{Env, EnvUnowned};
 use rust_tokenizers::tokenizer::{SentencePieceTokenizer, Tokenizer as RTTokenizer};
 use std::cmp::max;
 use std::fs;
-use std::ptr::null;
+
 // I know I'm not good at Rust.
 // But at least it's functional.... I think.
 // all this is old code lmao, this all comes from shit I actually wrote Jan 2025!

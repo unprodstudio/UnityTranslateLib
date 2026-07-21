@@ -36,7 +36,6 @@ use ct2rs::Tokenizer;
 use regex::Regex;
 use std::cell::Cell;
 use std::collections::HashMap;
-use tokenizers::models::bpe::BPE;
 
 // surely this is enough, right?
 // every previous time, we literally broke the C++ compiler and made Rust actually panic every time
@@ -83,6 +82,10 @@ pub struct BPEConstants {
     OPEN_QUOTES: Regex,
 
     CJK_RANGES: Vec<(usize, usize)>,
+
+    DASH_REGEX: Regex,
+    MAIL_REGEX: Regex,
+    NOT_DOT_COMMA_REGEX: Regex,
 }
 
 impl BPEConstants {
@@ -188,14 +191,16 @@ impl Default for BPEConstants {
                 (110592, 110895),
                 (110960, 111359),
                 (131072, 196607)
-            ]
+            ],
+
+            DASH_REGEX: Regex::new(r"^[--]$").unwrap(),
+            MAIL_REGEX: Regex::new(r"(?i)^li$|^mail.*").unwrap(),
+            NOT_DOT_COMMA_REGEX: Regex::new(r"^[.,]+$").unwrap(),
         }
     }
 }
 
 pub struct BPETokenizer {
-    //decoder: tokenizers::decoders::bpe::BPEDecoder,
-    pub(crate) tokenizer: BPE,
     codes: HashMap<(String, String), usize>,
     cache: Cell<HashMap<String, Vec<String>>>,
     version: String,
@@ -220,7 +225,7 @@ impl BPETokenizer {
             }
 
             let split = line.split(" ").collect::<Vec<&str>>();
-            let token1 = split.get(0).unwrap();
+            let token1 = split.first().unwrap();
             let token2 = split.get(1).unwrap();
 
             bpe_codes.insert((token1.to_string(), token2.to_string()), offset);
@@ -231,27 +236,13 @@ impl BPETokenizer {
             codes: bpe_codes,
             cache: Cell::new(HashMap::new()),
             version,
-            tokenizer: BPE::builder()
-                .end_of_word_suffix("</w>".to_string())
-                .build().unwrap(),
             constants: BPEConstants::default()
         }
     }
 
-    fn min(&self, pairs: &Vec<(String, String)>) -> (String, String) {
-        let mut current_key = usize::MAX;
-        let mut min: &(String, String) = &(String::new(), String::new());
-
-        for pair in pairs {
-            let key = self.codes.get(&pair).or_else(|| { Some(&usize::MAX) }).unwrap();
-
-            if std::cmp::min(current_key, *key) != current_key {
-                min = pair;
-                current_key = *key;
-            }
-        }
-
-        min.clone()
+    fn min<'a>(&self, pairs: &'a [(String, String)]) -> &'a (String, String) {
+        let codes = &self.codes;
+        pairs.iter().min_by_key(|pair| codes.get(pair)).unwrap()
     }
 
     pub fn segment_tokens(&self, tokens: Vec<String>) -> Vec<String> {
@@ -280,25 +271,38 @@ fn get_pairs(word: &str) -> Vec<(String, String)> {
     pairs
 }
 
+macro_rules! debug_println {
+     ($($arg:tt)*) => {{
+         if (false) {
+             println!($($arg)*);
+         }
+    }};
+}
+
 impl Tokenizer for BPETokenizer {
     fn encode(&self, input: &str) -> anyhow::Result<Vec<String>> {
         let mut cache = self.cache.take();
 
+        debug_println!("Start BPE encode for {input}, we are v{0}", self.version);
         if cache.contains_key(input) {
+            debug_println!("Found cache");
             let cached = cache.get(input).unwrap();
             return Ok(cached.clone());
         }
 
         let mut word = if self.version == "0.1" {
+            debug_println!("handle v0.1");
             let mut vec: Vec<String> = Vec::new();
             for char in input.chars() {
                 vec.push(char.to_string());
             }
 
             vec.push("</w>".to_string());
+            debug_println!("done handle v0.1");
 
             vec
         } else if self.version == "0.2" {
+            debug_println!("handle v0.2");
             let mut vec: Vec<String> = Vec::new();
             let mut chars = input.chars();
             let fucksake = chars.next_back().unwrap().to_string();
@@ -312,6 +316,7 @@ impl Tokenizer for BPETokenizer {
             let fuckoff2 = fuckoff + "</w>";
             let combined = fuckoff2.as_str();
             vec.push(combined.to_string());
+            debug_println!("done handle v0.2");
 
             vec
         } else {
@@ -321,12 +326,15 @@ impl Tokenizer for BPETokenizer {
         let mut pairs = get_pairs(input);
 
         if pairs.is_empty() {
+            debug_println!("pairs are empty, returning.");
             return Ok(vec![input.to_string()]);
         };
 
         loop {
+            debug_println!("loop start");
             let bigram = self.min(&pairs);
-            if !self.codes.contains_key(&bigram) {
+            if !self.codes.contains_key(bigram) {
+                debug_println!("broke out, let's leave");
                 break;
             }
 
@@ -336,62 +344,81 @@ impl Tokenizer for BPETokenizer {
             let mut i: usize = 0;
 
             while i < word.len() {
-                let j = word.iter().position(|c| *c == first);
+                debug_println!("loop while");
+                if let Some(j) = word.get(i..).unwrap().iter().position(|c| *c == first) {
+                    for pos in i..j {
+                        debug_println!("loop for j exists with pos {pos}");
+                        new_word.push(word[pos].to_string());
+                    }
 
-                if j.is_none() {
-                    for pos in i..word.len() {
-                        new_word.push(word[pos].to_string());
-                    }
+                    i = j;
                 } else {
-                    for pos in i..j.unwrap() {
+                    for pos in i..word.len() {
+                        debug_println!("loop for j none with pos {pos}");
                         new_word.push(word[pos].to_string());
                     }
+
+                    break;
                 }
 
                 if word[i] == first && i < word.len() - 1 && word[i + 1] == second {
                     new_word.push(first.to_owned() + second);
                     i += 2;
                 } else {
+                    debug_println!("loop while +1");
                     new_word.push(word[i].to_owned());
                     i += 1;
                 }
             }
 
+            debug_println!("new word found");
             word = new_word;
             if word.len() == 1 {
+                debug_println!("word length == 1, break out");
                 break;
             } else {
+                debug_println!("update pairs");
                 let str = word.join("");
                 pairs = get_pairs(str.as_str());
             }
         }
 
         if word.last() == Some(&"</w>".to_string()) {
+            debug_println!("equals close token, popping");
             word.pop();
         } else if word.last().unwrap().ends_with("</w>") {
+            debug_println!("ends with close token, popping");
             let last = word.last().unwrap().as_str();
             word.push(last.replace("</w>", "").to_string());
         }
 
+        debug_println!("insert");
         cache.insert(input.to_string(), word.clone());
+        debug_println!("done encode");
         Ok(word)
     }
 
     fn decode(&self, tokens: Vec<String>) -> anyhow::Result<String> {
+        debug_println!("Start BPE decode, we are v{0}", self.version);
         let constants = &self.constants;
 
         let regexp = &constants.AGGRESSIVE_HYPHEN_SPLIT.0;
         let substitution = &constants.AGGRESSIVE_HYPHEN_SPLIT.1;
         let mut text = format!(" {} ", tokens.join(" "));
+        debug_println!("Combined text {text}");
         text = regexp.replace_all(substitution, &text).to_string();
+        debug_println!("Replaced text {text}");
         text = self.constants.unescape_xml(&text);
+        debug_println!("Unescaped text {text}");
 
         let mut prepend_space = " ".to_string();
         let mut detokenized_text = "".to_string();
 
         let tokens = text.split(" ").collect::<Vec<&str>>();
         let lang = "en"; // TODO: make this support other langs
+        debug_println!("Language {lang}");
 
+        debug_println!("Quote counts init");
         let mut quote_counts: HashMap<&str, usize> = HashMap::new();
         quote_counts.insert("'", 0);
         quote_counts.insert("\"", 0);
@@ -399,10 +426,13 @@ impl Tokenizer for BPETokenizer {
         quote_counts.insert("`", 0);
         quote_counts.insert("''", 0);
 
-        let mut i = 0;
-        for token in &tokens {
+        for (i, token) in tokens.iter().enumerate() {
+            debug_println!("Start loop tokens");
+
             let chars = token.chars().collect::<Vec<char>>();
             if self.constants.is_cjk(chars[0]) && lang != "ko" {
+                debug_println!("cjk char found, not ko");
+
                 if i > 0 && self.constants.is_cjk(tokens[i - 1].chars().last().unwrap()) {
                     detokenized_text += token;
                 } else {
@@ -427,7 +457,7 @@ impl Tokenizer for BPETokenizer {
                 prepend_space = " ".to_string();
             } else if lang == "cs" && i > 1
                 && self.constants.NUMBERS.is_match(tokens[tokens.len() - 2])
-                && Regex::new(r"^[.,]+$").unwrap().is_match(tokens[tokens.len() - 1])
+                && self.constants.NOT_DOT_COMMA_REGEX.is_match(tokens[tokens.len() - 1])
                 && self.constants.NUMBERS.is_match(token) {
                 detokenized_text += token;
                 prepend_space = " ".to_string();
@@ -438,13 +468,14 @@ impl Tokenizer for BPETokenizer {
                 detokenized_text += token;
                 prepend_space = "".to_string();
             } else if lang == "cs" && i <= tokens.len() - 3 && self.constants.IS_FRENCH_CONTRACTION.is_match(token)
-                && Regex::new(r"^[--]$").unwrap().is_match(tokens[i + 1])
-                && Regex::new(r"(?i)^li$|^mail.*").unwrap().is_match(tokens[i + 2]) {
+                && self.constants.DASH_REGEX.is_match(tokens[i + 1])
+                && self.constants.MAIL_REGEX.is_match(tokens[i + 2]) {
                 detokenized_text += prepend_space.as_str();
                 detokenized_text += token;
                 detokenized_text += tokens[i + 1];
                 prepend_space = "".to_string();
             } else if self.constants.IS_OPEN_QUOTE.is_match(token) {
+                debug_println!("open quote found");
                 let mut normalized_quo = token;
                 if self.constants.OPEN_QUOTES.is_match(token) {
                     normalized_quo = &"\"";
@@ -474,17 +505,21 @@ impl Tokenizer for BPETokenizer {
                     prepend_space = " ".to_string();
                     quote_counts.insert(normalized_quo, *quote_counts.get(normalized_quo).unwrap_or(&0) + 1);
                 }
+
+                debug_println!("completed open quote");
             } else if lang == "fi" && self.constants.COLON.is_match(tokens[i - 1]) && self.constants.FINNISH_REGEX.is_match(token) {
+                debug_println!("is fi lang, colon matches and finnish regex");
                 detokenized_text += prepend_space.as_str();
                 detokenized_text += token;
                 prepend_space = " ".to_string();
             } else {
+                debug_println!("none match, regular add {token}");
                 detokenized_text += prepend_space.as_str();
                 detokenized_text += token;
                 prepend_space = " ".to_string();
             }
 
-            i += 1;
+            debug_println!("Detokenized text now {detokenized_text}, prepend space \"{prepend_space}\"");
         }
 
         detokenized_text = BPEConstants::substitute(detokenized_text, &self.constants.ONE_SPACE);

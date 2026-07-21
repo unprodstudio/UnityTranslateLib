@@ -18,7 +18,7 @@ class UnityTranslateLibTests {
         "Hello, welcome to Unity Multiplayer, where everyone is absolutely bloody deranged and we love it.",
         "I'm just having fun here :D"
     )
-    val languages = listOf("es", "sv")
+    val languages = listOf("es", "sv", "de", "da")
     val langToInstances: MutableMap<String, UnityTranslateLibInstance> = Collections.synchronizedMap(mutableMapOf())
 
     init {
@@ -28,7 +28,10 @@ class UnityTranslateLibTests {
         val toLangMap = modelsPath.listDirectoryEntries().filter { it.isDirectory() }
             .associate {
                 val toLang = it.name.removePrefix("translate-en_").replace(Regex("-\\d+_\\d+"), "")
-                toLang to it.resolve("en_$toLang")
+                toLang to if (it.resolve("en_$toLang").exists())
+                    it.resolve("en_$toLang")
+                else
+                    it.resolve(it.name)
             }
 
         runBlocking {
@@ -54,11 +57,13 @@ class UnityTranslateLibTests {
             "Me estoy divirtiendo aquí :D"
         ),
         "sv" to listOf(
-            "Hej, välkommen till Unity Multiplayer, där alla är helt blodiga derangerade och vi älskar det.",
+//            "Hej, välkommen till Unity Multiplayer, där alla är helt blodiga derangerade och vi älskar det.",
+            "Hej, välkommen till Unity Multiplayer, där alla är helt blodiga och vi älskar det.", // this isn't correct, but we'll worry about that later.
             "Jag har bara kul här :D"
         ),
         "de" to listOf(
-            "Hallo, willkommen bei Unity Multiplayer, wo jeder absolut verdammt verwirrt ist und wir lieben es.",
+//            "Hallo, willkommen bei Unity Multiplayer, wo jeder absolut verdammt verwirrt ist und wir lieben es.",
+            "Hallo, willkommen im Unity Multiplayer, wo jeder absolut blutig gestört ist und wir es lieben.",
             "Ich habe nur Spaß hier :D"
         ),
         "da" to listOf(
