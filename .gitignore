@@ -12,3 +12,5 @@ release/
 .kotlin/
 .gradle/
 run/
+
+hs_err_pid*.log

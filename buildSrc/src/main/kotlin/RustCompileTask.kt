@@ -4,12 +4,7 @@ import org.gradle.api.tasks.TaskAction
 import org.gradle.work.DisableCachingByDefault
 
 @DisableCachingByDefault
-abstract class XmakeCompileTask : Exec() {
-    companion object {
-        var llvmPath = "C:\\Program Files\\LLVM"
-        var llvmMingWPath = "C:\\llvm-mingw"
-    }
-
+abstract class RustCompileTask : Exec() {
     @Input
     var platform: String = "windows"
 
@@ -25,9 +20,7 @@ abstract class XmakeCompileTask : Exec() {
         val extraArgs = this.extraArgs.toMutableList()
         var platform = this.platform
 
-        commandLine("xmake", "f", "-y", "-c", "-p", platform, "-a", arch, "-m", "release", *extraArgs.toTypedArray())
-        super.exec()
-        commandLine("xmake", "install", "-y", "-o", "build/install/${this.platform}/${this.arch}")
+        commandLine("cargo", "build", "--profile", "release", "--package", "unitytranslatelib", *extraArgs.toTypedArray())
         super.exec()
     }
 }

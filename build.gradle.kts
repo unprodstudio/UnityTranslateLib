@@ -34,7 +34,7 @@ kotlin {
     jvmToolchain(17)
 }
 
-val xmake = natives {
+val rust = natives {
     path = projectDir.toPath().resolve("jni")
 
     platform("windows", "x64")
@@ -56,10 +56,10 @@ tasks {
     test {
         doFirst {
             val esModel = URI.create("https://argos-net.com/v1/translate-en_es-1_0.argosmodel").toURL()
-            val deModel = URI.create("https://argos-net.com/v1/translate-en_de-1_3.argosmodel").toURL()
+            val daModel = URI.create("https://argos-net.com/v1/translate-en_da-1_9.argosmodel").toURL()
             val svModel = URI.create("https://argos-net.com/v1/translate-en_sv-1_5.argosmodel").toURL()
 
-            val models = listOf(esModel, deModel, svModel)
+            val models = listOf(esModel, daModel, svModel)
 
             for (modelUrl in models) {
                 val name = modelUrl.file
@@ -123,7 +123,7 @@ publishing {
             version = "${rootProject.version}"
             from(components.getByName("java"))
 
-            for (platform in xmake.platformTaskNames) {
+            for (platform in rust.platformTaskNames) {
                 artifact(tasks.getByName("nativesJar$platform"))
             }
         }

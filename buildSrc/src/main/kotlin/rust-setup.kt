@@ -6,7 +6,7 @@ import java.util.Locale
 fun String.uppercaseFirstChar(): String =
     replaceFirstChar { it.uppercase(Locale.US) }
 
-class XmakeSetup(val project: Project) {
+class RustSetup(val project: Project) {
     lateinit var path: Path
     val platforms: MutableList<String> = mutableListOf()
 
@@ -20,7 +20,7 @@ class XmakeSetup(val project: Project) {
         val taskName = "${platform.uppercaseFirstChar()}${arch.uppercaseFirstChar()}"
         platforms.add("$platform-$arch")
 
-        project.tasks.register<XmakeCompileTask>("compileCpp$taskName", XmakeCompileTask::class.java) {
+        project.tasks.register<RustCompileTask>("compileRust$taskName", RustCompileTask::class.java) {
             it.workingDir(path)
             it.platform = platform
             it.arch = arch
@@ -28,11 +28,15 @@ class XmakeSetup(val project: Project) {
         }
 
         project.tasks.register<Jar>("nativesJar$taskName", Jar::class.java) {
-            it.dependsOn("compileCpp$taskName")
+            it.dependsOn("compileRust$taskName")
             it.group = "build"
 
             it.into("unitytranslate/$platform/$arch") {
-                it.from(path.resolve("build/install/$platform/$arch/"))
+                it.from(path.resolve("target/release/${System.mapLibraryName("unitytranslatelib")}${when (platform) {
+                    "windows" -> ".dll"
+                    "macos", "mac", "osx", "macosx" -> ".dylib"
+                    else -> ".so"
+                }}"))
             }
 
             it.archiveClassifier.set("natives-$platform-$arch")
@@ -40,8 +44,8 @@ class XmakeSetup(val project: Project) {
     }
 }
 
-fun Project.natives(setup: XmakeSetup.() -> Unit): XmakeSetup {
-    val xmake = XmakeSetup(this)
+fun Project.natives(setup: RustSetup.() -> Unit): RustSetup {
+    val xmake = RustSetup(this)
     setup.invoke(xmake)
     return xmake
 }

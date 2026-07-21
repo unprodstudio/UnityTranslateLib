@@ -7,7 +7,7 @@ edition = "2024"
 crate-type = ["cdylib"]
 
 [dependencies]
-ct2rs = "0.9.22"
+ct2rs = { git = "https://github.com/unprodstudio/ctranslate2-rs" }
 jni = "0.22.4"
 rust_tokenizers = "8.1.1"
 anyhow = "1.0.95"

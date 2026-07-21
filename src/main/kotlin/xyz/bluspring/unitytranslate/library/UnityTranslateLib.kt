@@ -11,10 +11,7 @@ import kotlin.io.path.Path
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.exists
 
-/**
- * [path] - Specifies the path where UnityTranslateLib will download files such as translation models to.
- */
-class UnityTranslateLib(val path: Path) {
+class UnityTranslateLib {
     fun createInstance(lang: LangPair, type: TokenizerType, tokenizerPath: Path, translatorPath: Path, useCuda: Boolean): UnityTranslateLibInstance {
         return UnityTranslateLibInstance(this, lang, createInstance(lang.toCode, translatorPath.absolutePathString(), type.ordinal, tokenizerPath.absolutePathString(), useCuda))
     }
@@ -42,20 +39,20 @@ class UnityTranslateLib(val path: Path) {
                 return if (osArch == "x64") {
                     if (isWindows)
                         listOf(
-                            "$dir/bin/UnityTranslateLib.dll",
+                            "$dir/bin/unitytranslatelib.dll",
                             "$dir/bin/ctranslate2.dll",
-                            "$dir/bin/re2.dll",
+//                            "$dir/bin/re2.dll",
 //                            "$dir/bin/cudnn64_9.dll",
-                            "$dir/bin/libiomp5md.dll",
+//                            "$dir/bin/libiomp5md.dll",
                         )
                     else if (isMac)
                         listOf()
                     else
                         listOf(
                             "$dir/bin/libUnityTranslateLib.so",
-                            "$dir/bin/libctranslate2.so",
-                            "$dir/bin/libcudnn.so",
-                            "$dir/bin/libgomp.so"
+//                            "$dir/bin/libctranslate2.so",
+//                            "$dir/bin/libcudnn.so",
+//                            "$dir/bin/libgomp.so"
                         )
                 } else emptyList()
             }
