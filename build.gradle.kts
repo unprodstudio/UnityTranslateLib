@@ -1,3 +1,6 @@
+import java.net.URI
+import java.util.zip.ZipFile
+
 plugins {
     alias(libs.plugins.kotlin)
     alias(libs.plugins.kotlin.serialization)
@@ -16,6 +19,8 @@ repositories {
 }
 
 dependencies {
+    testImplementation(kotlin("test"))
+
     api(libs.bundles.kotlin)
     api(libs.slf4j.api)
     testRuntimeOnly(libs.slf4j.simple)
@@ -49,6 +54,54 @@ val xmake = natives {
 
 tasks {
     test {
+        doFirst {
+            val esModel = URI.create("https://argos-net.com/v1/translate-en_es-1_0.argosmodel").toURL()
+            val deModel = URI.create("https://argos-net.com/v1/translate-en_de-1_3.argosmodel").toURL()
+            val svModel = URI.create("https://argos-net.com/v1/translate-en_sv-1_5.argosmodel").toURL()
+
+            val models = listOf(esModel, deModel, svModel)
+
+            for (modelUrl in models) {
+                val name = modelUrl.file
+                val filePath = project.layout.buildDirectory.asFile.get().resolve(("models/$name"))
+                val dirPath = project.layout.buildDirectory.asFile.get().resolve(("models/${name.removeSuffix(".argosmodel")}"))
+
+                if (dirPath.exists())
+                    continue
+
+                if (!filePath.exists() && !dirPath.exists()) {
+                    modelUrl.openStream().use {
+                        filePath.outputStream().use { out ->
+                            it.transferTo(out)
+                        }
+                    }
+                }
+
+                filePath.parentFile.mkdirs()
+                filePath.createNewFile()
+
+                dirPath.mkdirs()
+
+                val zipFile = ZipFile(filePath)
+                for (entry in zipFile.stream()) {
+                    val file = dirPath.resolve(entry.name)
+                    if (file.exists())
+                        continue
+
+                    if (entry.isDirectory)
+                        continue
+
+                    file.parentFile.mkdirs()
+                    file.createNewFile()
+
+                    val inputStream = zipFile.getInputStream(entry)
+                    inputStream.use {
+                        it.transferTo(file.outputStream())
+                    }
+                }
+            }
+        }
+
         useJUnitPlatform()
     }
 }
