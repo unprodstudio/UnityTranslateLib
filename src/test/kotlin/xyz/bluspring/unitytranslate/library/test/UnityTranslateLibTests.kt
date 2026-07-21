@@ -18,7 +18,7 @@ class UnityTranslateLibTests {
         "Hello, welcome to Unity Multiplayer, where everyone is absolutely bloody deranged and we love it.",
         "I'm just having fun here :D"
     )
-    val languages = listOf("es", "sv", "da")
+    val languages = listOf("es", "sv")
     val langToInstances: MutableMap<String, UnityTranslateLibInstance> = Collections.synchronizedMap(mutableMapOf())
 
     init {

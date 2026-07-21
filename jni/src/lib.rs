@@ -73,8 +73,6 @@ pub extern "system" fn Java_xyz_bluspring_unitytranslate_library_UnityTranslateL
     use_cuda: jboolean
 ) -> jlong {
     let outcome = unowned_env.with_env(|env| -> jni::errors::Result<jlong> {
-        let model_path_value: String = translator_model_path.try_to_string(&env).expect("Failed to read tokenizer model path string!");
-
         let device = if use_cuda {
             Device::CUDA
         } else {
@@ -82,7 +80,7 @@ pub extern "system" fn Java_xyz_bluspring_unitytranslate_library_UnityTranslateL
         };
 
         let tokenizer_type_value = TokenizerType::from_jint(tokenizer_type);
-        let tokenizer_model_value = tokenizer_model_path.try_to_string(&env).expect("Failed to read tokenizer model path string!");
+        let tokenizer_model_value = tokenizer_model_path.try_to_string(env).expect("Failed to read tokenizer model path string!");
 
         let tokenizer: UnityTranslateTokenizer = match (tokenizer_type_value) {
             TokenizerType::SentencePiece => {
@@ -104,6 +102,7 @@ pub extern "system" fn Java_xyz_bluspring_unitytranslate_library_UnityTranslateL
         let mut config = Config::default();
         config.device = device;
 
+        let model_path_value: String = translator_model_path.try_to_string(env).expect("Failed to read tokenizer model path string!");
         let translator_result = Translator::with_tokenizer(model_path_value, tokenizer, &config);
 
         if let Ok(translator) = translator_result {
@@ -124,7 +123,7 @@ pub extern "system" fn Java_xyz_bluspring_unitytranslate_library_UnityTranslateL
     mut unowned_env: EnvUnowned<'local>, class: JClass<'local>,
     instance_ptr: jlong, text_to_translate: JObjectArray<'local>, results: JObjectArray<'local>
 ) {
-    let outcome = unowned_env.with_env(|mut env| -> jni::errors::Result<_> {
+    let outcome = unowned_env.with_env(|env| -> jni::errors::Result<_> {
         let translator: &mut Translator<UnityTranslateTokenizer>;
         unsafe {
             translator = Box::leak(Box::from_raw(instance_ptr as *mut Translator<UnityTranslateTokenizer>));
@@ -138,11 +137,11 @@ pub extern "system" fn Java_xyz_bluspring_unitytranslate_library_UnityTranslateL
         options.length_penalty = 0.2;
         options.return_scores = true;
 
-        let string_length = text_to_translate.len(&env).expect("Couldn't get java length!");
+        let string_length = text_to_translate.len(env).expect("Couldn't get java length!");
         let mut texts: Vec<String> = Vec::with_capacity(string_length);
         for i in 0..string_length {
-            let token_obj = text_to_translate.get_element(&mut env, i).unwrap_or_else(|_| panic!("Couldn't get element at pos {i}!"));
-            let token: JString<'local> = JString::cast_local(&mut env, token_obj).unwrap_or_else(|_| panic!("Couldn't cast element at pos {i} to JString!"));
+            let token_obj = text_to_translate.get_element(env, i).unwrap_or_else(|_| panic!("Couldn't get element at pos {i}!"));
+            let token: JString<'local> = JString::cast_local(env, token_obj).unwrap_or_else(|_| panic!("Couldn't cast element at pos {i} to JString!"));
             let token_value = JString::to_string(&token);
             texts.push(token_value);
         }
@@ -155,8 +154,8 @@ pub extern "system" fn Java_xyz_bluspring_unitytranslate_library_UnityTranslateL
         let results_vec =  translation_result.unwrap();
 
         for (i, (result, _score)) in results_vec.into_iter().enumerate() {
-            let result_str: JString = env.new_string(result).expect("Couldn't create java string!");
-            results.set_element(&env, i, result_str)
+            let result_str: JString = env.new_string(result.trim()).expect("Couldn't create java string!");
+            results.set_element(env, i, result_str)
                 .unwrap_or_else(|_| panic!("Couldn't set string at pos {i}!"));
         }
 

@@ -1,5 +1,6 @@
 package xyz.bluspring.unitytranslate.library
 
+import org.jetbrains.annotations.ApiStatus
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import xyz.bluspring.unitytranslate.library.util.LangPair
@@ -13,12 +14,20 @@ import kotlin.io.path.exists
 
 class UnityTranslateLib {
     fun createInstance(lang: LangPair, type: TokenizerType, tokenizerPath: Path, translatorPath: Path, useCuda: Boolean): UnityTranslateLibInstance {
+        if (!tokenizerPath.exists())
+            throw IllegalArgumentException("Could not find tokenizer path ${tokenizerPath.absolutePathString()}!")
+
+        if (!translatorPath.exists())
+            throw IllegalArgumentException("Could not find translator path ${tokenizerPath.absolutePathString()}!")
+
         return UnityTranslateLibInstance(this, lang, createInstance(lang.toCode, translatorPath.absolutePathString(), type.ordinal, tokenizerPath.absolutePathString(), useCuda))
     }
 
     private external fun createInstance(toLang: String, translatorModelPath: String, type: Int, tokenizerModelPath: String, useCuda: Boolean): Long
-    internal external fun batchTranslate(instance: Long, textToTranslate: Array<String>, results: Array<String>)
-    internal external fun freeInstance(instance: Long)
+    @ApiStatus.Internal
+    external fun batchTranslate(instance: Long, textToTranslate: Array<String>, results: Array<String>)
+    @ApiStatus.Internal
+    external fun freeInstance(instance: Long)
 
     companion object {
         val logger: Logger = LoggerFactory.getLogger(UnityTranslateLib::class.java)
@@ -40,7 +49,7 @@ class UnityTranslateLib {
                     if (isWindows)
                         listOf(
                             "$dir/bin/unitytranslatelib.dll",
-                            "$dir/bin/ctranslate2.dll",
+//                            "$dir/bin/ctranslate2.dll",
 //                            "$dir/bin/re2.dll",
 //                            "$dir/bin/cudnn64_9.dll",
 //                            "$dir/bin/libiomp5md.dll",
