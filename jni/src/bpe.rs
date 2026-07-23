@@ -1,6 +1,3 @@
-use ct2rs::Tokenizer;
-use lazy_static::lazy_static;
-use regex::Regex;
 // Ported from argos-translate's apply_bpe.py - https://github.com/argosopentech/argos-translate/blob/master/argostranslate/apply_bpe.py
 // and from SacreMoses' tokenize.py - https://github.com/hplt-project/sacremoses/blob/master/sacremoses/tokenize.py
 // which is itself ported from Moses' tokenizer.perl and detokenizer.perl - https://github.com/moses-smt/mosesdecoder/blob/master/scripts/tokenizer/tokenizer.perl & https://github.com/moses-smt/mosesdecoder/blob/master/scripts/tokenizer/detokenizer.perl
@@ -34,9 +31,13 @@ Reference:
 Rico Sennrich, Barry Haddow and Alexandra Birch (2015). Neural Machine Translation of Rare Words with Subword Units.
 Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics (ACL 2016). Berlin, Germany.
  */
+use ct2rs::Tokenizer;
+use regex::{regex, Regex};
 use std::borrow::Cow;
 use std::cell::Cell;
 use std::collections::HashMap;
+use std::fmt::Display;
+use std::sync::LazyLock;
 
 // surely this is enough, right?
 // every previous time, we literally broke the C++ compiler and made Rust actually panic every time
@@ -48,222 +49,190 @@ static FINNISH_MORPHSET_1: &str = "N n A a Ä ä ssa Ssa ssä Ssä sta stä Sta 
 static FINNISH_MORPHSET_2: &str = "ni si mme nne nsa";
 static FINNISH_MORPHSET_3: &str = "ko kö han hän pa pä kaan kään kin";
 
-// kinda praying this works how i think it does
-lazy_static! {
-    static ref IS_ALNUM: &'static str = r"\p{L}\p{N}"; // [\p{L}\p{N}] maybe?
-    static ref IS_N: &'static str = r"\p{N}";
-    static ref IS_ALPHA: &'static str = r"\p{L}";
-    static ref IS_SYMBOL: &'static str = r"\p{S}";
+const IS_ALNUM: &str = r"\p{L}\p{N}"; // [\p{L}\p{N}] maybe?
+const IS_N: &str = r"\p{N}";
+const IS_ALPHA: &str = r"\p{L}";
+const IS_SYMBOL: &str = r"\p{S}";
 
-    static ref DEDUPLICATE_SPACE: Regex = Regex::new(r"\s+").unwrap();
-    static ref ASCII_JUNK: Regex = Regex::new(r"[\x00-\x37]").unwrap();
+struct SubstitutionRule(LazyLock<Regex>, &'static str);
 
-    static ref PAD_NOT_ISALNUM: Regex = Regex::new(&format!(r"([^{}\s\.'\`\,\-])", *IS_ALNUM)).unwrap();
-    // static ref AGGRESSIVE_HYPHEN_SPLIT: Regex = Regex::new(&format!(r"([{}])\-(?=[{}])", *IS_ALNUM, *IS_ALNUM)).unwrap();
-
-    static ref EN_SPECIFIC_1: (Regex, String) = (Regex::new(&format!(r"([^{}])[']([^{}])", *IS_ALPHA, *IS_ALPHA)).unwrap(), r"$1 ' $2".to_string());
-    static ref EN_SPECIFIC_2: (Regex, String) = (Regex::new(&format!(r"([^{}{}])[']([{}])", *IS_ALPHA, *IS_N, *IS_ALPHA)).unwrap(), r"$1 ' $2".to_string());
-    static ref EN_SPECIFIC_3: (Regex, String) = (Regex::new(&format!(r"([{}])[']([^{}])", *IS_ALPHA, *IS_ALPHA)).unwrap(), r"$1 ' $2".to_string());
-    static ref EN_SPECIFIC_4: (Regex, String) = (Regex::new(&format!(r"([{}])[']([{}])", *IS_ALPHA, *IS_ALPHA)).unwrap(), r"$1 '$2".to_string());
-    static ref EN_SPECIFIC_5: (Regex, String) = (Regex::new(&format!(r"([{}])[']([s])", *IS_N)).unwrap(), r"$1 '$2".to_string());
-
-    static ref FR_IT_SPECIFIC_1: (Regex, String) = (Regex::new(&format!(r"([^{}])[']([^{}])", *IS_ALPHA, *IS_ALPHA)).unwrap(), r"$1 ' $2".to_string());
-    static ref FR_IT_SPECIFIC_2: (Regex, String) = (Regex::new(&format!(r"([^{}])[']([{}])", *IS_ALPHA, *IS_ALPHA)).unwrap(), r"$1 ' $2".to_string());
-    static ref FR_IT_SPECIFIC_3: (Regex, String) = (Regex::new(&format!(r"([{}])[']([^{}])", *IS_ALPHA, *IS_ALPHA)).unwrap(), r"$1 ' $2".to_string());
-    static ref FR_IT_SPECIFIC_4: (Regex, String) = (Regex::new(&format!(r"([{}])[']([{}])", *IS_ALPHA, *IS_ALPHA)).unwrap(), r"$1' $2".to_string());
-
-    static ref COMMA_SEPARATE_1: Regex = Regex::new(&format!(r"([^{}])[,]", *IS_N)).unwrap();
-    static ref COMMA_SEPARATE_2: Regex = Regex::new(&format!(r"[,]([^{}])", *IS_N)).unwrap();
-    static ref COMMA_SEPARATE_3: Regex = Regex::new(&format!(r"([{}])[,]$", *IS_N)).unwrap();
-
-    static ref ENGLISH_SPECIFIC_APOSTROPHE: Vec<&'static (Regex, String)> = vec![
-        &EN_SPECIFIC_1,
-        &EN_SPECIFIC_2,
-        &EN_SPECIFIC_3,
-        &EN_SPECIFIC_4,
-        &EN_SPECIFIC_5,
-    ];
-    static ref FR_IT_SPECIFIC_APOSTROPHE: Vec<&'static (Regex, String)> = vec![
-        &FR_IT_SPECIFIC_1,
-        &FR_IT_SPECIFIC_2,
-        &FR_IT_SPECIFIC_3,
-        &FR_IT_SPECIFIC_4,
-    ];
-
-    static ref NON_SPECIFIC_APOSTROPHE: (Regex, String) = (Regex::new(r"\'").unwrap(), " ' ".to_string());
-
-    static ref TRAILING_DOT_APOSTROPHE: (Regex, String) = (Regex::new(r"\.' ?$").unwrap(), " . ' ".to_string());
-
-    static ref ESCAPE_AMPERSAND: (Regex, String) = (Regex::new(r"&").unwrap(), r"&amp;".to_string());
-    static ref ESCAPE_PIPE: (Regex, String) = (Regex::new(r"\|").unwrap(), r"&#124;".to_string());
-    static ref ESCAPE_LEFT_ANGLE_BRACKET: (Regex, String) = (Regex::new(r"<").unwrap(), r"&lt;".to_string());
-    static ref ESCAPE_RIGHT_ANGLE_BRACKET: (Regex, String) = (Regex::new(r">").unwrap(), r"&gt;".to_string());
-    static ref ESCAPE_SINGLE_QUOTE: (Regex, String) = (Regex::new(r"\'").unwrap(), r"&apos;".to_string());
-    static ref ESCAPE_DOUBLE_QUOTE: (Regex, String) = (Regex::new(r#"""#).unwrap(), r"&quot;".to_string());
-    static ref ESCAPE_LEFT_SQUARE_BRACKET: (Regex, String) = (Regex::new(r"\[").unwrap(), r"&#91;".to_string());
-    static ref ESCAPE_RIGHT_SQUARE_BRACKET: (Regex, String) = (Regex::new(r"\]").unwrap(), r"&#93;".to_string());
-
-    static ref MOSES_ESCAPE_XML_REGEXES: Vec<&'static (Regex, String)> = vec![
-        &ESCAPE_AMPERSAND,
-        &ESCAPE_PIPE,
-        &ESCAPE_LEFT_ANGLE_BRACKET,
-        &ESCAPE_RIGHT_ANGLE_BRACKET,
-        &ESCAPE_SINGLE_QUOTE,
-        &ESCAPE_DOUBLE_QUOTE,
-        &ESCAPE_LEFT_SQUARE_BRACKET,
-        &ESCAPE_RIGHT_SQUARE_BRACKET,
-    ];
-}
-
-pub struct BPEConstants {
-    AGGRESSIVE_HYPHEN_SPLIT: (Regex, String),
-
-    // Merge multiple spaces.
-    ONE_SPACE: (Regex, String),
-
-    // Unescape special characters.
-    UNESCAPE_FACTOR_SEPARATOR: (Regex, String),
-    UNESCAPE_LEFT_ANGLE_BRACKET: (Regex, String),
-    UNESCAPE_RIGHT_ANGLE_BRACKET: (Regex, String),
-    UNESCAPE_DOUBLE_QUOTE: (Regex, String),
-    UNESCAPE_SINGLE_QUOTE: (Regex, String),
-    UNESCAPE_SYNTAX_NONTERMINAL_LEFT: (Regex, String),
-    UNESCAPE_SYNTAX_NONTERMINAL_RIGHT: (Regex, String),
-    UNESCAPE_AMPERSAND: (Regex, String),
-    // The legacy regexes are used to support outputs from older Moses versions.
-    UNESCAPE_FACTOR_SEPARATOR_LEGACY: (Regex, String),
-    UNESCAPE_SYNTAX_NONTERMINAL_LEFT_LEGACY: (Regex, String),
-    UNESCAPE_SYNTAX_NONTERMINAL_RIGHT_LEGACY: (Regex, String),
-
-    FINNISH_REGEX: Regex,
-    IS_CURRENCY_SYMBOL: Regex,
-    IS_ENGLISH_CONTRACTION: Regex,
-    IS_FRENCH_CONTRACTION: Regex,
-    STARTS_WITH_ALPHA: Regex,
-    IS_PUNCT: Regex,
-    IS_OPEN_QUOTE: Regex,
-
-    SYMBOLS: Regex,
-    NUMBERS: Regex,
-    S_END: Regex,
-    COLON: Regex,
-    OPEN_QUOTES: Regex,
-
-    CJK_RANGES: Vec<(usize, usize)>,
-
-    DASH_REGEX: Regex,
-    MAIL_REGEX: Regex,
-    DOT_COMMA_REGEX: Regex,
-}
-
-impl BPEConstants {
-    pub fn substitute(text: String, pair: &(Regex, String)) -> String {
-        pair.0.replace_all(text.as_str(), &pair.1).to_string()
+impl SubstitutionRule {
+    const fn new(pattern: LazyLock<Regex>, replacement: &'static str) -> Self {
+        Self(pattern, replacement)
     }
 
-    pub fn unescape_xml(&self, text: &str) -> String {
-        let mut unescaped_text = text.to_string();
-        unescaped_text = Self::substitute(unescaped_text, &self.UNESCAPE_FACTOR_SEPARATOR_LEGACY);
-        unescaped_text = Self::substitute(unescaped_text, &self.UNESCAPE_FACTOR_SEPARATOR);
-        unescaped_text = Self::substitute(unescaped_text, &self.UNESCAPE_LEFT_ANGLE_BRACKET);
-        unescaped_text = Self::substitute(unescaped_text, &self.UNESCAPE_RIGHT_ANGLE_BRACKET);
-        unescaped_text = Self::substitute(unescaped_text, &self.UNESCAPE_SYNTAX_NONTERMINAL_LEFT_LEGACY);
-        unescaped_text = Self::substitute(unescaped_text, &self.UNESCAPE_SYNTAX_NONTERMINAL_RIGHT_LEGACY);
-        unescaped_text = Self::substitute(unescaped_text, &self.UNESCAPE_DOUBLE_QUOTE);
-        unescaped_text = Self::substitute(unescaped_text, &self.UNESCAPE_SINGLE_QUOTE);
-        unescaped_text = Self::substitute(unescaped_text, &self.UNESCAPE_SYNTAX_NONTERMINAL_LEFT);
-        unescaped_text = Self::substitute(unescaped_text, &self.UNESCAPE_SYNTAX_NONTERMINAL_RIGHT);
-        unescaped_text = Self::substitute(unescaped_text, &self.UNESCAPE_AMPERSAND);
-
-        unescaped_text.to_string()
+    fn substitute<'a>(&self, text: &'a str) -> Cow<'a, str> {
+        self.0.replace_all(text, self.1)
     }
+}
 
-    pub fn is_cjk(&self, char: char) -> bool {
-        let char = char as u32;
-        let cjk_ranges = &self.CJK_RANGES;
+static DEDUPLICATE_SPACE: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\s+").unwrap()), " ");
+static ASCII_JUNK: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"[\x00-\x37]").unwrap()), "");
 
-        for (start, end) in cjk_ranges {
-            if char < *end as u32 {
-                return char > *start as u32;
-            }
+static PAD_NOT_ISALNUM: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"([^{}\s\.'\`\,\-])", IS_ALNUM)).unwrap()), r" $1 ");
+
+static EN_SPECIFIC_1: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"([^{}])[']([^{}])", IS_ALPHA, IS_ALPHA)).unwrap()), r"$1 ' $2");
+static EN_SPECIFIC_2: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"([^{}{}])[']([{}])", IS_ALPHA, IS_N, IS_ALPHA)).unwrap()), r"$1 ' $2");
+static EN_SPECIFIC_3: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"([{}])[']([^{}])", IS_ALPHA, IS_ALPHA)).unwrap()), r"$1 ' $2");
+static EN_SPECIFIC_4: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"([{}])[']([{}])", IS_ALPHA, IS_ALPHA)).unwrap()), r"$1 '$2");
+static EN_SPECIFIC_5: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"([{}])[']([s])", IS_N)).unwrap()), r"$1 '$2");
+
+static ENGLISH_SPECIFIC_APOSTROPHE: &[&SubstitutionRule] = &[
+    &EN_SPECIFIC_1,
+    &EN_SPECIFIC_2,
+    &EN_SPECIFIC_3,
+    &EN_SPECIFIC_4,
+    &EN_SPECIFIC_5,
+];
+
+static FR_IT_SPECIFIC_1: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"([^{}])[']([^{}])", IS_ALPHA, IS_ALPHA)).unwrap()), r"$1 ' $2");
+static FR_IT_SPECIFIC_2: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"([^{}])[']([{}])", IS_ALPHA, IS_ALPHA)).unwrap()), r"$1 ' $2");
+static FR_IT_SPECIFIC_3: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"([{}])[']([^{}])", IS_ALPHA, IS_ALPHA)).unwrap()), r"$1 ' $2");
+static FR_IT_SPECIFIC_4: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"([{}])[']([{}])", IS_ALPHA, IS_ALPHA)).unwrap()), r"$1' $2");
+
+static FR_IT_SPECIFIC_APOSTROPHE: &[&SubstitutionRule] = &[
+    &FR_IT_SPECIFIC_1,
+    &FR_IT_SPECIFIC_2,
+    &FR_IT_SPECIFIC_3,
+    &FR_IT_SPECIFIC_4,
+];
+
+static COMMA_SEPARATE_1: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"([^{}])[,]", IS_N)).unwrap()), r"$1 , ");
+static COMMA_SEPARATE_2: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"[,]([^{}])", IS_N)).unwrap()), r" , $1");
+static COMMA_SEPARATE_3: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"([{}])[,]$", IS_N)).unwrap()), r"$1 , ");
+
+static NON_SPECIFIC_APOSTROPHE: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\'").unwrap()), " ' ");
+
+static TRAILING_DOT_APOSTROPHE: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\.' ?$").unwrap()), " . ' ");
+
+static ESCAPE_AMPERSAND: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"&").unwrap()), r"&amp;");
+static ESCAPE_PIPE: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\|").unwrap()), r"&#124;");
+static ESCAPE_LEFT_ANGLE_BRACKET: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"<").unwrap()), r"&lt;");
+static ESCAPE_RIGHT_ANGLE_BRACKET: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r">").unwrap()), r"&gt;");
+static ESCAPE_SINGLE_QUOTE: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\'").unwrap()), r"&apos;");
+static ESCAPE_DOUBLE_QUOTE: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r#"""#).unwrap()), r"&quot;");
+static ESCAPE_LEFT_SQUARE_BRACKET: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\[").unwrap()), r"&#91;");
+static ESCAPE_RIGHT_SQUARE_BRACKET: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\]").unwrap()), r"&#93;");
+
+static MOSES_ESCAPE_XML_REGEXES: &[&SubstitutionRule] = &[
+    &ESCAPE_AMPERSAND,
+    &ESCAPE_PIPE,
+    &ESCAPE_LEFT_ANGLE_BRACKET,
+    &ESCAPE_RIGHT_ANGLE_BRACKET,
+    &ESCAPE_SINGLE_QUOTE,
+    &ESCAPE_DOUBLE_QUOTE,
+    &ESCAPE_LEFT_SQUARE_BRACKET,
+    &ESCAPE_RIGHT_SQUARE_BRACKET,
+];
+
+// Unescape special characters.
+static UNESCAPE_FACTOR_SEPARATOR: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"&#124;").unwrap()), "|");
+static UNESCAPE_LEFT_ANGLE_BRACKET: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"&lt;").unwrap()), "<");
+static UNESCAPE_RIGHT_ANGLE_BRACKET: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"&gt;").unwrap()), ">");
+static UNESCAPE_DOUBLE_QUOTE: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"&quot;").unwrap()), "\"");
+static UNESCAPE_SINGLE_QUOTE: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"&apos;").unwrap()), "'");
+static UNESCAPE_SYNTAX_NONTERMINAL_LEFT: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"&#91;").unwrap()), "[");
+static UNESCAPE_SYNTAX_NONTERMINAL_RIGHT: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"&#93;").unwrap()), "]");
+static UNESCAPE_AMPERSAND: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"&amp;").unwrap()), "&");
+
+// The legacy regexes are used to support outputs from older Moses versions.
+static UNESCAPE_FACTOR_SEPARATOR_LEGACY: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"&bar;").unwrap()), "|");
+static UNESCAPE_SYNTAX_NONTERMINAL_LEFT_LEGACY: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"&bra;").unwrap()), "[");
+static UNESCAPE_SYNTAX_NONTERMINAL_RIGHT_LEGACY: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"&ket;").unwrap()), "]");
+
+static AGGRESSIVE_HYPHEN_SPLIT: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"@-@").unwrap()), "");
+
+static ONE_SPACE: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r" {2,}").unwrap()), " ");
+
+static FINNISH_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(&format!(r"^({})({})?({})$",
+                                    FINNISH_MORPHSET_1.replace(' ', "|"),
+                                    FINNISH_MORPHSET_2.replace(' ', "|"),
+                                    FINNISH_MORPHSET_3.replace(' ', "|"),
+)).unwrap());
+
+static IS_CURRENCY_SYMBOL: LazyLock<Regex> = LazyLock::new(|| Regex::new(
+    r"^[(\[$¢£¤¥֏؋৲৳৻૱௹฿៛₠₡₢₣₤₥₦₧₨₩₪₫€₭₮₯₰₱₲₳₴₵₶₷₸₹₺₻₼₽꠸﷼﹩＄￠￡￥￦;{¿¡]+$"
+).unwrap());
+static IS_ENGLISH_CONTRACTION: LazyLock<Regex> = LazyLock::new(|| Regex::new(
+    &format!(r"^['][{}]", IS_ALPHA)
+).unwrap());
+static IS_FRENCH_CONTRACTION: LazyLock<Regex> = LazyLock::new(|| Regex::new(
+    &format!(r"[{}][']$", IS_ALPHA)
+).unwrap());
+static STARTS_WITH_ALPHA: LazyLock<Regex> = LazyLock::new(|| Regex::new(
+    &format!(r"^[{}]", IS_ALPHA)
+).unwrap());
+static IS_PUNCT: LazyLock<Regex> = LazyLock::new(|| Regex::new(
+    r"^[,.?!:;\\%}]\)]+$"
+).unwrap());
+static IS_OPEN_QUOTE: LazyLock<Regex> = LazyLock::new(|| Regex::new(
+    r#"^['"„“`]+$"#
+).unwrap());
+
+static SYMBOLS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[?!:;\\%]$").unwrap());
+static NUMBERS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[0-9]+$").unwrap());
+static S_END: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"s$").unwrap());
+static COLON: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^:$").unwrap());
+static OPEN_QUOTES: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[„“”]+$").unwrap());
+
+static DASH_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[--]$").unwrap());
+static MAIL_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)^li$|^mail.*").unwrap());
+static DOT_COMMA_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[.,]+$").unwrap());
+
+fn unescape_xml(text: &str) -> String {
+    let text = UNESCAPE_FACTOR_SEPARATOR_LEGACY.substitute(text);
+    let text = UNESCAPE_FACTOR_SEPARATOR.substitute(&text);
+    let text = UNESCAPE_LEFT_ANGLE_BRACKET.substitute(&text);
+    let text = UNESCAPE_RIGHT_ANGLE_BRACKET.substitute(&text);
+    let text = UNESCAPE_SYNTAX_NONTERMINAL_LEFT_LEGACY.substitute(&text);
+    let text = UNESCAPE_SYNTAX_NONTERMINAL_RIGHT_LEGACY.substitute(&text);
+    let text = UNESCAPE_DOUBLE_QUOTE.substitute(&text);
+    let text = UNESCAPE_SINGLE_QUOTE.substitute(&text);
+    let text = UNESCAPE_SYNTAX_NONTERMINAL_LEFT.substitute(&text);
+    let text = UNESCAPE_SYNTAX_NONTERMINAL_RIGHT.substitute(&text);
+    let text = UNESCAPE_AMPERSAND.substitute(&text);
+
+    text.to_string()
+}
+
+fn is_cjk(char: char) -> bool {
+    const CJK_RANGES: [(u32, u32); 12] = [
+        (4352, 4607),
+        (11904, 42191),
+        (43072, 43135),
+        (44032, 55215),
+        (63744, 64255),
+        (65072, 65103),
+        (65381, 65500),
+        (94176, 94207),
+        (94208, 101119),
+        (110592, 110895),
+        (110960, 111359),
+        (131072, 196607)
+    ];
+
+    let char = char as u32;
+
+    for (start, end) in CJK_RANGES {
+        if char < end {
+            return char > start;
         }
-
-        false
     }
+
+    false
 }
 
-impl Default for BPEConstants {
-    fn default() -> BPEConstants {
-        BPEConstants {
-            AGGRESSIVE_HYPHEN_SPLIT: (Regex::new(r"@-@").unwrap(), "".to_string()),
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+enum BPETokenizerVersion {
+    V0_1,
+    V0_2,
+}
 
-            // Merge multiple spaces.
-            ONE_SPACE: (Regex::new(r" {2,}").unwrap(), " ".to_string()),
-
-            // Unescape special characters.
-            UNESCAPE_FACTOR_SEPARATOR: (Regex::new(r"&#124;").unwrap(), "|".to_string()),
-            UNESCAPE_LEFT_ANGLE_BRACKET: (Regex::new(r"&lt;").unwrap(), "<".to_string()),
-            UNESCAPE_RIGHT_ANGLE_BRACKET: (Regex::new(r"&gt;").unwrap(), ">".to_string()),
-            UNESCAPE_DOUBLE_QUOTE: (Regex::new(r"&quot;").unwrap(), "\"".to_string()),
-            UNESCAPE_SINGLE_QUOTE: (Regex::new(r"&apos;").unwrap(), "'".to_string()),
-            UNESCAPE_SYNTAX_NONTERMINAL_LEFT: (Regex::new(r"&#91;").unwrap(), "[".to_string()),
-            UNESCAPE_SYNTAX_NONTERMINAL_RIGHT: (Regex::new(r"&#93;").unwrap(), "]".to_string()),
-            UNESCAPE_AMPERSAND: (Regex::new(r"&amp;").unwrap(), "&".to_string()),
-
-            // The legacy regexes are used to support outputs from older Moses versions.
-            UNESCAPE_FACTOR_SEPARATOR_LEGACY: (Regex::new(r"&bar;").unwrap(), "|".to_string()),
-            UNESCAPE_SYNTAX_NONTERMINAL_LEFT_LEGACY: (Regex::new(r"&bra;").unwrap(), "[".to_string()),
-            UNESCAPE_SYNTAX_NONTERMINAL_RIGHT_LEGACY: (Regex::new(r"&ket;").unwrap(), "]".to_string()),
-
-            FINNISH_REGEX: Regex::new(format!(r"^({})({})?({})$",
-                                              FINNISH_MORPHSET_1.split(" ").collect::<Vec<&str>>().join("|"),
-                                              FINNISH_MORPHSET_2.split(" ").collect::<Vec<&str>>().join("|"),
-                                              FINNISH_MORPHSET_3.split(" ").collect::<Vec<&str>>().join("|"),
-            ).as_str()).unwrap(),
-
-            IS_CURRENCY_SYMBOL: Regex::new(
-                r"^[(\[$¢£¤¥֏؋৲৳৻૱௹฿៛₠₡₢₣₤₥₦₧₨₩₪₫€₭₮₯₰₱₲₳₴₵₶₷₸₹₺₻₼₽꠸﷼﹩＄￠￡￥￦;{¿¡]+$"
-            ).unwrap(),
-            IS_ENGLISH_CONTRACTION: Regex::new(
-                &format!(r"^['][{}]", *IS_ALPHA).as_str()
-            ).unwrap(),
-            IS_FRENCH_CONTRACTION: Regex::new(
-                &format!(r"[{}][']$", *IS_ALPHA).as_str()
-            ).unwrap(),
-            STARTS_WITH_ALPHA: Regex::new(
-                &format!(r"^[{}]", *IS_ALPHA).as_str()
-            ).unwrap(),
-            IS_PUNCT: Regex::new(
-                r"^[,.?!:;\\%}]\)]+$"
-            ).unwrap(),
-            IS_OPEN_QUOTE: Regex::new(
-                r#"^['"„“`]+$"#
-            ).unwrap(),
-
-            SYMBOLS: Regex::new(r"^[?!:;\\%]$").unwrap(),
-            NUMBERS: Regex::new(r"^[0-9]+$").unwrap(),
-            S_END: Regex::new(r"s$").unwrap(),
-            COLON: Regex::new(r"^:$").unwrap(),
-            OPEN_QUOTES: Regex::new(r"^[„“”]+$").unwrap(),
-
-            CJK_RANGES: vec![
-                (4352, 4607),
-                (11904, 42191),
-                (43072, 43135),
-                (44032, 55215),
-                (63744, 64255),
-                (65072, 65103),
-                (65381, 65500),
-                (94176, 94207),
-                (94208, 101119),
-                (110592, 110895),
-                (110960, 111359),
-                (131072, 196607)
-            ],
-
-            DASH_REGEX: Regex::new(r"^[--]$").unwrap(),
-            MAIL_REGEX: Regex::new(r"(?i)^li$|^mail.*").unwrap(),
-            DOT_COMMA_REGEX: Regex::new(r"^[.,]+$").unwrap(),
+impl Display for BPETokenizerVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BPETokenizerVersion::V0_1 => f.write_str("0.1"),
+            BPETokenizerVersion::V0_2 => f.write_str("0.2"),
         }
     }
 }
@@ -271,8 +240,7 @@ impl Default for BPEConstants {
 pub struct BPETokenizer {
     codes: HashMap<(String, String), usize>,
     cache: Cell<HashMap<String, Vec<String>>>,
-    version: String,
-    constants: BPEConstants,
+    version: BPETokenizerVersion,
     pub normalizer: PunctNormalizer,
 
     from_lang: String,
@@ -283,14 +251,14 @@ impl BPETokenizer {
     pub fn new(codes: &str, from_lang: &str, to_lang: &str) -> BPETokenizer {
         let mut offset = 1;
         let mut bpe_codes: HashMap<(String, String), usize> = HashMap::new();
-        let mut version: String = "0.1".to_string();
+        let mut version = BPETokenizerVersion::V0_1;
 
         for line in codes.lines() {
             if line.starts_with("version: ") {
                 if line.starts_with("#version: 0.1") {
-                    version = "0.1".to_string();
+                    version = BPETokenizerVersion::V0_1;
                 } else if line.starts_with("#version: 0.2") {
-                    version = "0.2".to_string();
+                    version = BPETokenizerVersion::V0_2;
                 }
 
                 continue;
@@ -308,7 +276,6 @@ impl BPETokenizer {
             codes: bpe_codes,
             cache: Cell::new(HashMap::new()),
             version,
-            constants: BPEConstants::default(),
             normalizer: PunctNormalizer::new(from_lang),
             from_lang: from_lang.to_string(),
             to_lang: to_lang.to_string(),
@@ -370,97 +337,94 @@ macro_rules! debug_println_decode {
 impl BPETokenizer {
     // https://github.com/hplt-project/sacremoses/blob/master/sacremoses/tokenize.py#L431
     pub fn tokenize(&self, text: &str) -> String {
-        let mut text = text.to_string();
-
         // de-duplicate spaces and clean ASCII junk
-        text = DEDUPLICATE_SPACE.replace(&text, " ").to_string();
-        text = ASCII_JUNK.replace(&text, "").to_string();
+        let text = DEDUPLICATE_SPACE.substitute(text);
+        let text = ASCII_JUNK.substitute(&text);
 
         // (we don't do protected patterns)
 
         // trim leading and trailing
-        text = text.trim().to_string();
+        let text = text.trim();
 
         // separate special characters outside IsAlnum charset
-        text = PAD_NOT_ISALNUM.replace(&text, r" $1 ").to_string();
+        let text = PAD_NOT_ISALNUM.substitute(text);
 
         // (we don't do aggressive dash splits)
 
         // replace multidots with "DOTDOTMULTI" literal
-        text = self.replace_multidots(text);
+        let text = self.replace_multidots(&text);
 
-        text = COMMA_SEPARATE_1.replace(&text, r"$1 , ").to_string();
-        text = COMMA_SEPARATE_2.replace(&text, r" , $1").to_string();
-        text = COMMA_SEPARATE_3.replace(&text, r"$1 , ").to_string();
+        let text = COMMA_SEPARATE_1.substitute(&text);
+        let text = COMMA_SEPARATE_2.substitute(&text);
+        let text = COMMA_SEPARATE_3.substitute(&text);
 
+        let mut text = text.to_string();
         if self.from_lang == "en" {
-            for x in ENGLISH_SPECIFIC_APOSTROPHE.iter() {
-                text = x.0.replace(&text, x.1.as_str()).to_string();
+            for x in ENGLISH_SPECIFIC_APOSTROPHE {
+                text = x.substitute(&text).to_string();
             }
         } else if self.from_lang == "fr" || self.from_lang == "it" {
-            for x in FR_IT_SPECIFIC_APOSTROPHE.iter() {
-                text = x.0.replace(&text, x.1.as_str()).to_string();
+            for x in FR_IT_SPECIFIC_APOSTROPHE {
+                text = x.substitute(&text).to_string();
             }
         } else {
-            text = NON_SPECIFIC_APOSTROPHE.0.replace(&text, NON_SPECIFIC_APOSTROPHE.1.as_str()).to_string();
+            text = NON_SPECIFIC_APOSTROPHE.substitute(&text).to_string();
         }
 
-        text = self.handles_nonbreaking_prefixes(text);
+        let text = self.handles_nonbreaking_prefixes(&text);
 
-        text = DEDUPLICATE_SPACE.replace(&text, " ").trim().to_string();
-        text = TRAILING_DOT_APOSTROPHE.0.replace(&text, TRAILING_DOT_APOSTROPHE.1.as_str()).to_string();
+        let text = DEDUPLICATE_SPACE.substitute(&text);
+        let text = TRAILING_DOT_APOSTROPHE.substitute(text.trim());
 
         // no protected patterns here
 
-        text = self.restore_multidots(text);
+        let text = self.restore_multidots(&text);
 
         // we handle XML escapes
-        text = self.escape_xml(text);
+        let text = self.escape_xml(&text);
 
-        text
+        text.to_string()
     }
 
-    fn escape_xml(&self, text: String) -> String {
-        let mut text = text;
-        for (regex, sub) in MOSES_ESCAPE_XML_REGEXES.iter() {
-            text = regex.replace(&text, sub).to_string();
+    fn escape_xml(&self, text: &str) -> String {
+        let mut text = text.to_string();
+        for pat in MOSES_ESCAPE_XML_REGEXES {
+            text = pat.substitute(&text).to_string();
+        }
+
+        text.to_string()
+    }
+
+    fn restore_multidots(&self, text: &str) -> String {
+        let mut text = text.to_string();
+        while text.contains("DOTDOTMULTI") {
+            text = text.replace("DOTDOTMULTI", r"DOTMULTI.");
+        }
+
+        text.replace("DOTMULTI", ".")
+    }
+
+    fn replace_multidots(&self, text: &str) -> String {
+        let mut text = text.to_string();
+        let dotmulti: &Regex = regex!(r"DOTMULTI\.");
+
+        while dotmulti.is_match(text.as_str()) {
+            let regex = regex!(r"DOTMULTI\.([^.])");
+            text = regex.replace_all(&text, r"DOTDOTMULTI $1").to_string();
+            text = dotmulti.replace_all(&text, "DOTDOTMULTI").to_string();
         }
 
         text
     }
 
-    fn restore_multidots(&self, text: String) -> String {
-        let mut text = text;
-        let dotmulti = Regex::new(r"DOTDOTMULTI").unwrap();
-        while dotmulti.find(text.as_str()).is_some() {
-            text = dotmulti.replace(&text, r"DOTMULTI.").to_string();
-        }
-
-        let regex = Regex::new(r"DOTMULTI").unwrap();
-        regex.replace(&text, ".").to_string()
-    }
-
-    fn replace_multidots(&self, text: String) -> String {
-        let mut text = text;
-        let dotmulti = Regex::new(r"DOTMULTI\.").unwrap();
-
-        while dotmulti.find(text.as_str()).is_some() {
-            let regex = Regex::new(r"DOTMULTI\.([^.])").unwrap();
-            text = regex.replace(&text, r"DOTDOTMULTI $1").to_string();
-            text = dotmulti.replace(&text, "DOTDOTMULTI").to_string();
-        }
-
-        text
-    }
-
-    fn handles_nonbreaking_prefixes(&self, text: String) -> String {
-        let mut tokens = text.split(" ").collect::<Vec<&str>>();
+    fn handles_nonbreaking_prefixes(&self, text: &str) -> String {
+        let tokens: Vec<_> = text.split(' ').collect();
         let num_tokens = tokens.len();
 
         for (i, token) in tokens.iter().enumerate() {
             // check if token ends w/ a full stop
-            if let Some(token_ends_with_period) = Regex::new(r"^(\S+)\.$").unwrap().captures(token) {
-                if let Some(prefix) = token_ends_with_period.get(1) {
+            if let Some(token_ends_with_period) = regex!(r"^(\S+)\.$").captures(token)
+                && let Some(prefix) = token_ends_with_period.get(1) {
                     let prefix_str = &prefix.as_str();
                     if (prefix_str.contains(".") && self.isanyalpha(prefix_str.to_string()))
                         //|| NONBREAKING_PREFIXES // we don't have prefix data
@@ -477,11 +441,9 @@ impl BPETokenizer {
                         // tokens[i] = (&prefix.to_string() + " .").as_str(); // how in the fuck
                     }
                 }
-            }
         }
 
-        let joined = tokens.join(" ");
-        joined
+        tokens.join(" ")
     }
 
     fn isanyalpha(&self, text: String) -> bool {
@@ -510,33 +472,25 @@ impl Tokenizer for BPETokenizer {
             return Ok(cached.clone());
         }
 
-        let mut word = if self.version == "0.1" {
-            debug_println_encode!("handle v0.1");
-            let vec: Vec<String> = vec![
-                input.to_string(),
-                "</w>".to_string(),
-            ];
-            debug_println_encode!("done handle v0.1");
+        let mut word = match self.version {
+            BPETokenizerVersion::V0_1 => {
+                debug_println_encode!("handle v0.1");
+                let vec: Vec<String> = vec![
+                    input.to_string(),
+                    "</w>".to_string(),
+                ];
+                debug_println_encode!("done handle v0.1");
 
-            vec
-        } else if self.version == "0.2" {
-            debug_println_encode!("handle v0.2");
-            let mut vec: Vec<String> = Vec::new();
-            let mut chars = input.chars();
-            let fucksake = chars.next_back().unwrap().to_string();
-            let last = fucksake.as_str();
+                vec
+            },
+            BPETokenizerVersion::V0_2 => {
+                debug_println_encode!("handle v0.2");
+                let (head, tail) = input.split_at(input.floor_char_boundary(input.len() - 1));
+                let vec = vec![head.to_string(), format!("{tail}</w>")];
+                debug_println_encode!("done handle v0.2");
 
-            vec.push(chars.as_str().to_string());
-
-            let fuckoff = last.to_owned();
-            let fuckoff2 = fuckoff + "</w>";
-            let combined = fuckoff2.as_str();
-            vec.push(combined.to_string());
-            debug_println_encode!("done handle v0.2");
-
-            vec
-        } else {
-            panic!("Unsupported version: {} (input: {})", self.version, input);
+                vec
+            }
         };
 
         let mut pairs = get_pairs(input);
@@ -620,21 +574,18 @@ impl Tokenizer for BPETokenizer {
 
     fn decode(&self, tokens: Vec<String>) -> anyhow::Result<String> {
         debug_println_decode!("Start BPE decode, we are v{0}", self.version);
-        let constants = &self.constants;
 
-        let regexp = &constants.AGGRESSIVE_HYPHEN_SPLIT.0;
-        let substitution = &constants.AGGRESSIVE_HYPHEN_SPLIT.1;
         let mut text = format!(" {} ", tokens.join(" "));
         debug_println_decode!("Combined text {text}");
-        text = regexp.replace_all(&text, substitution).to_string();
+        text = AGGRESSIVE_HYPHEN_SPLIT.substitute(&text).to_string();
         debug_println_decode!("Replaced text {text}");
-        text = self.constants.unescape_xml(&text);
+        text = unescape_xml(&text);
         debug_println_decode!("Unescaped text {text}");
 
-        let mut prepend_space = " ".to_string();
-        let mut detokenized_text = "".to_string();
+        let mut prepend_space = " ";
+        let mut detokenized_text = String::new();
 
-        let tokens = text.split(" ").collect::<Vec<&str>>();
+        let tokens: Vec<_> = text.split(" ").collect();
         let lang = self.to_lang.as_str();
         debug_println_decode!("Language {lang}");
 
@@ -661,56 +612,56 @@ impl Tokenizer for BPETokenizer {
             debug_println_decode!("Start loop tokens, on {token} at index {i}");
 
             let chars = token.chars().collect::<Vec<char>>();
-            if self.constants.is_cjk(chars[0]) && lang != "ko" {
+            if is_cjk(chars[0]) && lang != "ko" {
                 debug_println_decode!("cjk char found, not ko");
 
-                if i > 0 && self.constants.is_cjk(tokens[i - 1].chars().last().unwrap()) {
+                if i > 0 && is_cjk(tokens[i - 1].chars().last().unwrap()) {
                     detokenized_text += token;
                 } else {
-                    detokenized_text += prepend_space.as_str();
+                    detokenized_text += prepend_space;
                     detokenized_text += token;
                 }
 
-                prepend_space = " ".to_string();
-            } else if self.constants.IS_CURRENCY_SYMBOL.is_match(token) {
-                detokenized_text += prepend_space.as_str();
+                prepend_space = " ";
+            } else if IS_CURRENCY_SYMBOL.is_match(token) {
+                detokenized_text += prepend_space;
                 detokenized_text += token;
-                prepend_space = "".to_string();
-            } else if self.constants.IS_PUNCT.is_match(token) {
-                if lang == "fr" && self.constants.SYMBOLS.is_match(token) {
+                prepend_space = "";
+            } else if IS_PUNCT.is_match(token) {
+                if lang == "fr" && SYMBOLS.is_match(token) {
                     detokenized_text += " ";
                 }
 
                 detokenized_text += token;
-                prepend_space = " ".to_string();
-            } else if lang == "en" && i > 0 && self.constants.IS_ENGLISH_CONTRACTION.is_match(token) {
+                prepend_space = " ";
+            } else if lang == "en" && i > 0 && IS_ENGLISH_CONTRACTION.is_match(token) {
                 detokenized_text += token;
-                prepend_space = " ".to_string();
+                prepend_space = " ";
             } else if lang == "cs" && i > 1
-                && self.constants.NUMBERS.is_match(tokens[tokens.len() - 2])
-                && self.constants.DOT_COMMA_REGEX.is_match(tokens[tokens.len() - 1])
-                && self.constants.NUMBERS.is_match(token) {
+                && NUMBERS.is_match(tokens[tokens.len() - 2])
+                && DOT_COMMA_REGEX.is_match(tokens[tokens.len() - 1])
+                && NUMBERS.is_match(token) {
                 detokenized_text += token;
-                prepend_space = " ".to_string();
+                prepend_space = " ";
             } else if (lang == "fr" || lang == "it" || lang == "ga") && i <= tokens.len() - 2
-                && self.constants.IS_FRENCH_CONTRACTION.is_match(token)
-                && self.constants.STARTS_WITH_ALPHA.is_match(tokens[i + 1]) {
-                detokenized_text += prepend_space.as_str();
+                && IS_FRENCH_CONTRACTION.is_match(token)
+                && STARTS_WITH_ALPHA.is_match(tokens[i + 1]) {
+                detokenized_text += prepend_space;
                 detokenized_text += token;
-                prepend_space = "".to_string();
-            } else if lang == "cs" && i <= tokens.len() - 3 && self.constants.IS_FRENCH_CONTRACTION.is_match(token)
-                && self.constants.DASH_REGEX.is_match(tokens[i + 1])
-                && self.constants.MAIL_REGEX.is_match(tokens[i + 2].to_lowercase().as_str()) {
-                detokenized_text += prepend_space.as_str();
+                prepend_space = "";
+            } else if lang == "cs" && i <= tokens.len() - 3 && IS_FRENCH_CONTRACTION.is_match(token)
+                && DASH_REGEX.is_match(tokens[i + 1])
+                && MAIL_REGEX.is_match(tokens[i + 2].to_lowercase().as_str()) {
+                detokenized_text += prepend_space;
                 detokenized_text += token;
                 detokenized_text += tokens[i + 1];
                 i_mut += 1;
                 iter.next();
-                prepend_space = "".to_string();
-            } else if self.constants.IS_OPEN_QUOTE.is_match(token) {
+                prepend_space = "";
+            } else if IS_OPEN_QUOTE.is_match(token) {
                 debug_println_decode!("open quote found");
                 let mut normalized_quo = token;
-                if self.constants.OPEN_QUOTES.is_match(token) {
+                if OPEN_QUOTES.is_match(token) {
                     normalized_quo = "\"";
                 }
 
@@ -725,60 +676,156 @@ impl Tokenizer for BPETokenizer {
                 }
 
                 if quote_counts[normalized_quo].is_multiple_of(2) {
-                    if lang == "en" && token == "'" && i > 0 && self.constants.S_END.is_match(tokens[i - 1]) {
+                    if lang == "en" && token == "'" && i > 0 && S_END.is_match(tokens[i - 1]) {
                         detokenized_text += token;
-                        prepend_space = " ".to_string();
+                        prepend_space = " ";
                     } else {
-                        detokenized_text += prepend_space.as_str();
+                        detokenized_text += prepend_space;
                         detokenized_text += token;
                         quote_counts.insert(normalized_quo, *quote_counts.get(normalized_quo).unwrap_or(&0) + 1);
                     }
                 } else {
                     detokenized_text += token;
-                    prepend_space = " ".to_string();
+                    prepend_space = " ";
                     quote_counts.insert(normalized_quo, *quote_counts.get(normalized_quo).unwrap_or(&0) + 1);
                 }
 
                 debug_println_decode!("completed open quote");
-            } else if lang == "fi" && self.constants.COLON.is_match(tokens[i - 1]) && self.constants.FINNISH_REGEX.is_match(token) {
+            } else if lang == "fi" && COLON.is_match(tokens[i - 1]) && FINNISH_REGEX.is_match(token) {
                 debug_println_decode!("is fi lang, colon matches and finnish regex");
-                detokenized_text += prepend_space.as_str();
+                detokenized_text += prepend_space;
                 detokenized_text += token;
-                prepend_space = " ".to_string();
+                prepend_space = " ";
             } else {
                 debug_println_decode!("none match, regular add {token}");
-                detokenized_text += prepend_space.as_str();
+                detokenized_text += prepend_space;
                 detokenized_text += token;
-                prepend_space = " ".to_string();
+                prepend_space = " ";
             }
 
             debug_println_decode!("Detokenized text now {detokenized_text}, prepend space \"{prepend_space}\"");
         }
 
-        detokenized_text = BPEConstants::substitute(detokenized_text, &self.constants.ONE_SPACE);
-        detokenized_text = detokenized_text.trim().to_string();
-
-        Ok(detokenized_text)
+        Ok(ONE_SPACE.substitute(&detokenized_text).trim().to_string())
     }
 }
 
-struct NormalizerConstants {
-    EXTRA_WHITESPACE: Vec<(String, String)>,
-    REPLACE_UNICODE_PUNCTUATION: Vec<(String, String)>,
-    NORMALIZE_UNICODE_IF_NOT_PENN: Vec<(String, String)>,
-    NORMALIZE_UNICODE: Vec<(String, String)>,
-    FRENCH_QUOTES: Vec<(String, String)>,
-    HANDLE_PSEUDO_SPACES: Vec<(String, String)>,
-    EN_QUOTATION_FOLLOWED_BY_COMMA: Vec<(String, String)>,
-    DE_ES_FR_QUOTATION_FOLLOWED_BY_COMMA: Vec<(String, String)>,
-    DE_ES_CZ_CS_FR: Vec<(String, String)>,
-    OTHER: Vec<(String, String)>,
-}
+static REPLACE_UNICODE_PUNCTUATION: [SubstitutionRule; 36] = [
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("，").unwrap()), ","),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new(r"。\s*").unwrap()), ". "),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("、").unwrap()), ","),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("”").unwrap()), "\""),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("“").unwrap()), "\""),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("∶").unwrap()), ":"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("：").unwrap()), ":"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("？").unwrap()), "?"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("《").unwrap()), "\""),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("》").unwrap()), "\""),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("）").unwrap()), ")"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("！").unwrap()), "!"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("（").unwrap()), "("),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("；").unwrap()), ";"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("」").unwrap()), "\""),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("「").unwrap()), "\""),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("０").unwrap()), "0"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("１").unwrap()), "1"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("２").unwrap()), "2"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("３").unwrap()), "3"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("４").unwrap()), "4"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("５").unwrap()), "5"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("６").unwrap()), "6"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("７").unwrap()), "7"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("８").unwrap()), "8"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("９").unwrap()), "9"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new(r"．\s*").unwrap()), ". "),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("～").unwrap()), "~"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("’").unwrap()), "'"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("…").unwrap()), "..."),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("━").unwrap()), "-"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("〈").unwrap()), "<"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("〉").unwrap()), ">"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("【").unwrap()), "["),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("】").unwrap()), "]"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("％").unwrap()), "%"),
+];
+static EXTRA_WHITESPACE: [SubstitutionRule; 10] = [  //lines 21 - 30
+    SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\r").unwrap()), r""),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\(").unwrap()), r" ("),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\)").unwrap()), r") "),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new(r" +").unwrap()), r" "),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\) ([.!:?;,])").unwrap()), r")\g<1>"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\( ").unwrap()), r"("),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new(r" \)").unwrap()), r")"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new(r"(\d) %").unwrap()), r"\g<1>%"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new(r" :").unwrap()), r":"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new(r" ;").unwrap()), r";"),
+];
+
+static NORMALIZE_UNICODE_IF_NOT_PENN: [SubstitutionRule; 2] = [
+    SubstitutionRule::new(LazyLock::new(|| Regex::new(r"`").unwrap()), r"'"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new(r"''").unwrap()), r##" " "##)
+];  //lines 33 - 34
+
+static NORMALIZE_UNICODE: [SubstitutionRule; 15] = [  //lines 37 - 50
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("„").unwrap()), r##"""##),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("“").unwrap()), r##"""##),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("”").unwrap()), r##"""##),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("–").unwrap()), r"-"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("—").unwrap()), r" - "),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new(r" +").unwrap()), r" "),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("´").unwrap()), r"'"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("([a-zA-Z])‘([a-zA-Z])").unwrap()), r"\g<1>'\g<2>"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("([a-zA-Z])’([a-zA-Z])").unwrap()), r"\g<1>'\g<2>"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("‘").unwrap()), r"'"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("‚").unwrap()), r"'"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("’").unwrap()), r"'"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new(r"''").unwrap()), r##"""##),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("´´").unwrap()), r##"""##),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("…").unwrap()), r"..."),
+];
+
+static FRENCH_QUOTES: [SubstitutionRule; 6] = [  //lines 52 - 57
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("\u{00A0}«\u{00A0}").unwrap()), r#"""#),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("«\u{00A0}").unwrap()), r#"""#),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("«").unwrap()), r#"""#),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("\u{00A0}»\u{00A0}").unwrap()), r#"""#),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("\u{00A0}»").unwrap()), r#"""#),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("»").unwrap()), r#"""#),
+];
+
+static HANDLE_PSEUDO_SPACES: [SubstitutionRule; 10] = [  //lines 59 - 67
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("\u{00A0}%").unwrap()), r"%"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("nº\u{00A0}").unwrap()), "nº "),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("\u{00A0}:").unwrap()), r":"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("\u{00A0}ºC").unwrap()), " ºC"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("\u{00A0}cm").unwrap()), r" cm"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("\u{00A0}\\?").unwrap()), "?"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("\u{00A0}\\!").unwrap()), "!"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("\u{00A0};").unwrap()), r";"),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new(",\u{00A0}").unwrap()), r").unwrap()), "),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new(r" +").unwrap()), r" "),
+];
+
+static EN_QUOTATION_FOLLOWED_BY_COMMA: [SubstitutionRule; 1] = [
+    SubstitutionRule::new(LazyLock::new(|| Regex::new(r##""([,.]+)"##).unwrap()), r##"\g<1>""##)
+];
+
+static DE_ES_FR_QUOTATION_FOLLOWED_BY_COMMA: [SubstitutionRule; 2] = [
+    SubstitutionRule::new(LazyLock::new(|| Regex::new(r##",""##).unwrap()), r#"","#),
+    SubstitutionRule::new(LazyLock::new(|| Regex::new(r#"(\.+)"(\s*[^<])"#).unwrap()), r#""\g<1>\g<2>"#),  //don't fix period at end of sentence
+];
+
+static DE_ES_CZ_CS_FR: [SubstitutionRule; 1] = [
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("(\\d)\u{00A0}(\\d)").unwrap()), r"\g<1>,\g<2>"),
+];
+
+static OTHER: [SubstitutionRule; 1] = [
+    SubstitutionRule::new(LazyLock::new(|| Regex::new("(\\d)\u{00A0}(\\d)").unwrap()), r"\g<1>.\g<2>"),
+];
 
 // ported from https://github.com/hplt-project/sacremoses/blob/master/sacremoses/normalize.py
 pub struct PunctNormalizer {
-    constants: NormalizerConstants,
-    substitutions: Vec<(String, String)>,
+    substitutions: Vec<&'static SubstitutionRule>,
 
     pre_replace_unicode_punct: bool,
     post_remove_control_chars: bool,
@@ -786,126 +833,11 @@ pub struct PunctNormalizer {
 
 impl PunctNormalizer {
     pub fn new(lang: &str) -> PunctNormalizer {
-        let constants = NormalizerConstants {
-            REPLACE_UNICODE_PUNCTUATION: vec![
-                ("，".to_string(), ",".to_string()),
-                (r"。\s*".to_string(), ". ".to_string()),
-                ("、".to_string(), ",".to_string()),
-                ("”".to_string(), '"'.to_string()),
-                ("“".to_string(), '"'.to_string()),
-                ("∶".to_string(), ":".to_string()),
-                ("：".to_string(), ":".to_string()),
-                ("？".to_string(), "?".to_string()),
-                ("《".to_string(), '"'.to_string()),
-                ("》".to_string(), '"'.to_string()),
-                ("）".to_string(), ")".to_string()),
-                ("！".to_string(), "!".to_string()),
-                ("（".to_string(), "(".to_string()),
-                ("；".to_string(), ";".to_string()),
-                ("」".to_string(), '"'.to_string()),
-                ("「".to_string(), '"'.to_string()),
-                ("０".to_string(), "0".to_string()),
-                ("１".to_string(), "1".to_string()),
-                ("２".to_string(), "2".to_string()),
-                ("３".to_string(), "3".to_string()),
-                ("４".to_string(), "4".to_string()),
-                ("５".to_string(), "5".to_string()),
-                ("６".to_string(), "6".to_string()),
-                ("７".to_string(), "7".to_string()),
-                ("８".to_string(), "8".to_string()),
-                ("９".to_string(), "9".to_string()),
-                (r"．\s*".to_string(), ". ".to_string()),
-                ("～".to_string(), "~".to_string()),
-                ("’".to_string(), "'".to_string()),
-                ("…".to_string(), "...".to_string()),
-                ("━".to_string(), "-".to_string()),
-                ("〈".to_string(), "<".to_string()),
-                ("〉".to_string(), ">".to_string()),
-                ("【".to_string(), "[".to_string()),
-                ("】".to_string(), "]".to_string()),
-                ("％".to_string(), "%".to_string()),
-            ],
-            EXTRA_WHITESPACE: vec![  //lines 21 - 30
-                (r"\r".to_string(), r"".to_string()),
-                (r"\(".to_string(), r" (".to_string()),
-                (r"\)".to_string(), r") ".to_string()),
-                (r" +".to_string(), r" ".to_string()),
-                (r"\) ([.!:?;,])".to_string(), r")\g<1>".to_string()),
-                (r"\( ".to_string(), r"(".to_string()),
-                (r" \)".to_string(), r")".to_string()),
-                (r"(\d) %".to_string(), r"\g<1>%".to_string()),
-                (r" :".to_string(), r":".to_string()),
-                (r" ;".to_string(), r";".to_string()),
-            ],
-
-            NORMALIZE_UNICODE_IF_NOT_PENN: vec![
-                (r"`".to_string(), r"'".to_string()),
-                (r"''".to_string(), r##" " "##.to_string())
-            ],  //lines 33 - 34
-
-            NORMALIZE_UNICODE: vec![  //lines 37 - 50
-                ("„".to_string(), r##"""##.to_string()),
-                ("“".to_string(), r##"""##.to_string()),
-                ("”".to_string(), r##"""##.to_string()),
-                ("–".to_string(), r"-".to_string()),
-                ("—".to_string(), r" - ".to_string()),
-                (r" +".to_string(), r" ".to_string()),
-                ("´".to_string(), r"'".to_string()),
-                ("([a-zA-Z])‘([a-zA-Z])".to_string(), r"\g<1>'\g<2>".to_string()),
-                ("([a-zA-Z])’([a-zA-Z])".to_string(), r"\g<1>'\g<2>".to_string()),
-                ("‘".to_string(), r"'".to_string()),
-                ("‚".to_string(), r"'".to_string()),
-                ("’".to_string(), r"'".to_string()),
-                (r"''".to_string(), r##"""##.to_string()),
-                ("´´".to_string(), r##"""##.to_string()),
-                ("…".to_string(), r"...".to_string()),
-            ],
-
-            FRENCH_QUOTES: vec![  //lines 52 - 57
-                ("\u{00A0}«\u{00A0}".to_string(), r#"""#.to_string()),
-                ("«\u{00A0}".to_string(), r#"""#.to_string()),
-                ("«".to_string(), r#"""#.to_string()),
-                ("\u{00A0}»\u{00A0}".to_string(), r#"""#.to_string()),
-                ("\u{00A0}»".to_string(), r#"""#.to_string()),
-                ("»".to_string(), r#"""#.to_string()),
-            ],
-
-            HANDLE_PSEUDO_SPACES: vec![  //lines 59 - 67
-                ("\u{00A0}%".to_string(), r"%".to_string()),
-                ("nº\u{00A0}".to_string(), "nº ".to_string()),
-                ("\u{00A0}:".to_string(), r":".to_string()),
-                ("\u{00A0}ºC".to_string(), " ºC".to_string()),
-                ("\u{00A0}cm".to_string(), r" cm".to_string()),
-                ("\u{00A0}\\?".to_string(), "?".to_string()),
-                ("\u{00A0}\\!".to_string(), "!".to_string()),
-                ("\u{00A0};".to_string(), r";".to_string()),
-                (",\u{00A0}".to_string(), r", ".to_string()),
-                (r" +".to_string(), r" ".to_string()),
-            ],
-
-            EN_QUOTATION_FOLLOWED_BY_COMMA: vec![
-                (r##""([,.]+)"##.to_string(), r##"\g<1>""##.to_string())
-            ],
-
-            DE_ES_FR_QUOTATION_FOLLOWED_BY_COMMA: vec![
-                (r##",""##.to_string(), r#"","#.to_string()),
-                (r#"(\.+)"(\s*[^<])"#.to_string(), r#""\g<1>\g<2>"#.to_string()),  //don't fix period at end of sentence
-            ],
-
-            DE_ES_CZ_CS_FR: vec![
-                ("(\\d)\u{00A0}(\\d)".to_string(), r"\g<1>,\g<2>".to_string()),
-            ],
-
-            OTHER: vec![
-                ("(\\d)\u{00A0}(\\d)".to_string(), r"\g<1>.\g<2>".to_string()),
-            ],
-        };
-
-        let mut substitutions = vec![
-            constants.EXTRA_WHITESPACE.clone(),
-            constants.NORMALIZE_UNICODE.clone(),
-            constants.FRENCH_QUOTES.clone(),
-            constants.HANDLE_PSEUDO_SPACES.clone(),
+        let mut substitutions: Vec<&[SubstitutionRule]> = vec![
+            &EXTRA_WHITESPACE,
+            &NORMALIZE_UNICODE,
+            &FRENCH_QUOTES,
+            &HANDLE_PSEUDO_SPACES,
         ];
 
         let penn = true;
@@ -915,28 +847,27 @@ impl PunctNormalizer {
         let post_remove_control_chars = false;
 
         if penn {
-            substitutions.insert(1, constants.NORMALIZE_UNICODE_IF_NOT_PENN.clone());
+            substitutions.insert(1, &NORMALIZE_UNICODE_IF_NOT_PENN);
         }
 
         if norm_quote_commas {
             if lang == "en" {
-                substitutions.push(constants.EN_QUOTATION_FOLLOWED_BY_COMMA.clone());
+                substitutions.push(&EN_QUOTATION_FOLLOWED_BY_COMMA);
             } else if lang == "de" || lang == "es" || lang == "fr" {
-                substitutions.push(constants.DE_ES_FR_QUOTATION_FOLLOWED_BY_COMMA.clone());
+                substitutions.push(&DE_ES_FR_QUOTATION_FOLLOWED_BY_COMMA);
             }
         }
 
         if norm_numbers {
             if lang == "de" || lang == "es" || lang == "cz" || lang == "cs" || lang == "fr" {
-                substitutions.push(constants.DE_ES_CZ_CS_FR.clone());
+                substitutions.push(&DE_ES_CZ_CS_FR);
             } else {
-                substitutions.push(constants.OTHER.clone());
+                substitutions.push(&OTHER);
             }
         }
 
         PunctNormalizer {
-            constants,
-            substitutions: substitutions.iter().flatten().cloned().collect(),
+            substitutions: substitutions.into_iter().flatten().collect(),
             pre_replace_unicode_punct,
             post_remove_control_chars,
         }
@@ -949,9 +880,7 @@ impl PunctNormalizer {
         }
 
         for x in &self.substitutions {
-            let regex = Regex::new(x.0.as_str()).unwrap();
-            let replaced = regex.replace(&text, x.1.as_str());
-            text = replaced.to_string();
+            text = x.substitute(&text).to_string();
         }
 
         if self.post_remove_control_chars {
@@ -964,19 +893,14 @@ impl PunctNormalizer {
     fn replace_unicode_punct(&self, text: String) -> String {
         let mut text: String = text.to_string();
 
-        for x in &self.constants.REPLACE_UNICODE_PUNCTUATION {
-            let regex = Regex::new(x.0.as_str()).unwrap();
-            let replaced = regex.replace(&text, x.1.as_str());
-            let str = replaced.to_string();
-            text = str;
+        for x in &REPLACE_UNICODE_PUNCTUATION {
+            text = x.substitute(&text).to_string();
         }
 
         text
     }
 
     fn remove_control_chars(&self, text: String) -> String {
-        let regex = Regex::new(r"\p{C}").unwrap();
-        let replaced = regex.replace(&text, "");
-        replaced.to_string()
+        regex!(r"\p{C}").replace_all(&text, "").to_string()
     }
 }

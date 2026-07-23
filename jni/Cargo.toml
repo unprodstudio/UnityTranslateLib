@@ -13,7 +13,6 @@ jni = "0.22.4"
 rust_tokenizers = "8.1.1"
 anyhow = "1.0.104"
 regex = { version = "1.13.1", features = ["unicode-perl"] }
-lazy_static = "1.5.0"
 
 [features]
 accelerate = ["ct2rs/accelerate"]

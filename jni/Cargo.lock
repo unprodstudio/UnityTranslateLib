@@ -1263,7 +1263,6 @@ dependencies = [
  "anyhow",
  "ct2rs",
  "jni",
- "lazy_static",
  "regex",
  "rust_tokenizers",
 ]

@@ -4,7 +4,7 @@ use crate::bpe::BPETokenizer;
 use ct2rs::{Config, Device, Tokenizer, TranslationOptions, Translator};
 use jni::objects::{JClass, JObjectArray, JString};
 use jni::sys::{jboolean, jint, jlong};
-use jni::{Env, EnvUnowned};
+use jni::EnvUnowned;
 use rust_tokenizers::tokenizer::{SentencePieceTokenizer, Tokenizer as RTTokenizer};
 use std::cmp::max;
 use std::fs;
@@ -14,9 +14,9 @@ use std::fs;
 // all this is old code lmao, this all comes from shit I actually wrote Jan 2025!
 // I just ended up coming back here now that I've actually hopefully fixed the BPE problem!
 
-struct UnityTranslateTokenizer {
-    sentence_piece_tokenizer: Option<SentencePieceTokenizer>,
-    bpe_tokenizer: Option<BPETokenizer>
+enum UnityTranslateTokenizer {
+    SentencePiece(SentencePieceTokenizer),
+    BPE(BPETokenizer),
 }
 
 enum TokenizerType {
@@ -35,50 +35,43 @@ impl TokenizerType {
 
 impl Tokenizer for UnityTranslateTokenizer {
     fn encode(&self, input: &str) -> anyhow::Result<Vec<String>> {
-        if let Some(sp) = &self.sentence_piece_tokenizer {
-            let result = sp.tokenize(input);
-            Ok(result)
-        } else if let Some(bpe) = &self.bpe_tokenizer {
-            println!("Encoding {input}");
-            let normalized = bpe.normalizer.normalize(input);
-            println!("Normalized to {normalized}");
-            let joined = bpe.tokenize(normalized.as_str());
+        match self {
+            UnityTranslateTokenizer::SentencePiece(sp) => Ok(sp.tokenize(input)),
+            UnityTranslateTokenizer::BPE(bpe) => {
+                println!("Encoding {input}");
+                let normalized = bpe.normalizer.normalize(input);
+                println!("Normalized to {normalized}");
+                let joined = bpe.tokenize(normalized.as_str());
 
-            println!("Joined result: {joined}");
-            let trimmed = joined
-                .strip_prefix("\r\n ").unwrap_or(joined.as_str())
-                .strip_suffix("\r\n ").unwrap_or(joined.as_str());
-            println!("Trimmed: {trimmed}");
-            let split = trimmed.split(" ").map(|x| x.to_string()).collect::<Vec<String>>();
-            let segmented = bpe.segment_tokens(split);
+                println!("Joined result: {joined}");
+                let trimmed = joined
+                    .strip_prefix("\r\n ").unwrap_or(joined.as_str())
+                    .strip_suffix("\r\n ").unwrap_or(joined.as_str());
+                println!("Trimmed: {trimmed}");
+                let split = trimmed.split(" ").map(|x| x.to_string()).collect::<Vec<String>>();
+                let segmented = bpe.segment_tokens(split);
 
-            println!("Segmented: ");
-            for x in segmented.clone() {
-                println!("{x}");
-            }
+                println!("Segmented: ");
+                for x in segmented.clone() {
+                    println!("{x}");
+                }
 
-            Ok(segmented)
-        } else {
-            Err(anyhow::anyhow!("UnityTranslateTokenizer"))
+                Ok(segmented)
+            },
         }
     }
 
     fn decode(&self, tokens: Vec<String>) -> anyhow::Result<String> {
-        if let Some(sp) = &self.sentence_piece_tokenizer {
-            let result = sp.convert_tokens_to_string(tokens);
-            Ok(result)
-        } else if let Some(bpe) = &self.bpe_tokenizer {
-            let result = bpe.decode(tokens);
-            result
-        } else {
-            Err(anyhow::anyhow!("UnityTranslateTokenizer"))
+        match self {
+            UnityTranslateTokenizer::SentencePiece(sp) => Ok(sp.convert_tokens_to_string(tokens)),
+            UnityTranslateTokenizer::BPE(bpe) => bpe.decode(tokens),
         }
     }
 }
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_xyz_bluspring_unitytranslate_library_UnityTranslateLib_createInstance<'local>(
-    mut unowned_env: EnvUnowned<'local>, class: JClass<'local>,
+    mut unowned_env: EnvUnowned<'local>, _class: JClass<'local>,
     from_lang: JString<'local>, to_lang: JString<'local>, translator_model_path: JString<'local>,
     tokenizer_type: jint, tokenizer_model_path: JString<'local>,
     use_cuda: jboolean
@@ -93,12 +86,12 @@ pub extern "system" fn Java_xyz_bluspring_unitytranslate_library_UnityTranslateL
         let tokenizer_type_value = TokenizerType::from_jint(tokenizer_type);
         let tokenizer_model_value = tokenizer_model_path.try_to_string(env).expect("Failed to read tokenizer model path string!");
 
-        let tokenizer: UnityTranslateTokenizer = match (tokenizer_type_value) {
+        let tokenizer: UnityTranslateTokenizer = match tokenizer_type_value {
             TokenizerType::SentencePiece => {
                 let tokenizer = SentencePieceTokenizer::from_file(tokenizer_model_value, false)
                     .expect("Couldn't load SentencePiece model path!");
 
-                UnityTranslateTokenizer { sentence_piece_tokenizer: Some(tokenizer), bpe_tokenizer: None }
+                UnityTranslateTokenizer::SentencePiece(tokenizer)
             }
 
             TokenizerType::Bpe => {
@@ -109,12 +102,14 @@ pub extern "system" fn Java_xyz_bluspring_unitytranslate_library_UnityTranslateL
                 let to_lang_value = to_lang.try_to_string(env).expect("Failed to read to_lang string!");
                 let tokenizer = BPETokenizer::new(bpe_model_data.as_str(), from_lang_value.as_str(), to_lang_value.as_str());
 
-                UnityTranslateTokenizer { sentence_piece_tokenizer: None, bpe_tokenizer: Some(tokenizer) }
+                UnityTranslateTokenizer::BPE(tokenizer)
             }
         };
 
-        let mut config = Config::default();
-        config.device = device;
+        let config = Config {
+            device,
+            ..Default::default()
+        };
 
         let model_path_value: String = translator_model_path.try_to_string(env).expect("Failed to read tokenizer model path string!");
         let translator_result = Translator::with_tokenizer(model_path_value, tokenizer, &config);
@@ -134,7 +129,7 @@ pub extern "system" fn Java_xyz_bluspring_unitytranslate_library_UnityTranslateL
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_xyz_bluspring_unitytranslate_library_UnityTranslateLib_batchTranslate<'local>(
-    mut unowned_env: EnvUnowned<'local>, class: JClass<'local>,
+    mut unowned_env: EnvUnowned<'local>, _class: JClass<'local>,
     instance_ptr: jlong, text_to_translate: JObjectArray<'local>, results: JObjectArray<'local>
 ) {
     let outcome = unowned_env.with_env(|env| -> jni::errors::Result<_> {
@@ -144,12 +139,14 @@ pub extern "system" fn Java_xyz_bluspring_unitytranslate_library_UnityTranslateL
         }
         // Recreate Argos Translate's behaviour
         let num_hypotheses = 4;
-        let mut options = TranslationOptions::default();
-        options.replace_unknowns = true;
-        options.beam_size = max(num_hypotheses, 4);
-        options.num_hypotheses = num_hypotheses;
-        options.length_penalty = 0.2;
-        options.return_scores = true;
+        let options = TranslationOptions {
+            replace_unknowns: true,
+            beam_size: max(num_hypotheses, 4),
+            num_hypotheses,
+            length_penalty: 0.2,
+            return_scores: true,
+            ..Default::default()
+        };
 
         let string_length = text_to_translate.len(env).expect("Couldn't get java length!");
         let mut texts: Vec<String> = Vec::with_capacity(string_length);
@@ -181,7 +178,7 @@ pub extern "system" fn Java_xyz_bluspring_unitytranslate_library_UnityTranslateL
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_xyz_bluspring_unitytranslate_library_UnityTranslateLib_freeInstance<'local>(
-    mut _env: Env<'local>, _class: JClass<'local>,
+    mut _env: EnvUnowned<'local>, _class: JClass<'local>,
     _instance_ptr: jlong
 ) {
     // this might not actually be needed.....
