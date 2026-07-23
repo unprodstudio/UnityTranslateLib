@@ -67,7 +67,7 @@ impl SubstitutionRule {
 }
 
 static DEDUPLICATE_SPACE: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\s+").unwrap()), " ");
-static ASCII_JUNK: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"[\x00-\x37]").unwrap()), "");
+static ASCII_JUNK: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"[\x00-\x1f]").unwrap()), "");
 
 static PAD_NOT_ISALNUM: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"([^{}\s\.'\`\,\-])", IS_ALNUM)).unwrap()), r" $1 ");
 
@@ -101,7 +101,7 @@ static COMMA_SEPARATE_1: SubstitutionRule = SubstitutionRule::new(LazyLock::new(
 static COMMA_SEPARATE_2: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"[,]([^{}])", IS_N)).unwrap()), r" , $1");
 static COMMA_SEPARATE_3: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"([{}])[,]$", IS_N)).unwrap()), r"$1 , ");
 
-static NON_SPECIFIC_APOSTROPHE: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\'").unwrap()), " ' ");
+static NON_SPECIFIC_APOSTROPHE: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"'").unwrap()), " ' ");
 
 static TRAILING_DOT_APOSTROPHE: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\.' ?$").unwrap()), " . ' ");
 
@@ -109,10 +109,10 @@ static ESCAPE_AMPERSAND: SubstitutionRule = SubstitutionRule::new(LazyLock::new(
 static ESCAPE_PIPE: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\|").unwrap()), r"&#124;");
 static ESCAPE_LEFT_ANGLE_BRACKET: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"<").unwrap()), r"&lt;");
 static ESCAPE_RIGHT_ANGLE_BRACKET: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r">").unwrap()), r"&gt;");
-static ESCAPE_SINGLE_QUOTE: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\'").unwrap()), r"&apos;");
+static ESCAPE_SINGLE_QUOTE: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"'").unwrap()), r"&apos;");
 static ESCAPE_DOUBLE_QUOTE: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r#"""#).unwrap()), r"&quot;");
 static ESCAPE_LEFT_SQUARE_BRACKET: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\[").unwrap()), r"&#91;");
-static ESCAPE_RIGHT_SQUARE_BRACKET: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\]").unwrap()), r"&#93;");
+static ESCAPE_RIGHT_SQUARE_BRACKET: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"]").unwrap()), r"&#93;");
 
 static MOSES_ESCAPE_XML_REGEXES: &[&SubstitutionRule] = &[
     &ESCAPE_AMPERSAND,
@@ -334,54 +334,80 @@ macro_rules! debug_println_decode {
     }};
 }
 
+macro_rules! debug_println_tokenize {
+     ($($arg:tt)*) => {{
+         if (false) {
+             println!($($arg)*);
+         }
+    }};
+}
+
 impl BPETokenizer {
     // https://github.com/hplt-project/sacremoses/blob/master/sacremoses/tokenize.py#L431
     pub fn tokenize(&self, text: &str) -> String {
+        debug_println_tokenize!("input: {text}");
         // de-duplicate spaces and clean ASCII junk
         let text = DEDUPLICATE_SPACE.substitute(text);
+        debug_println_tokenize!("deduplicate space: {text}");
         let text = ASCII_JUNK.substitute(&text);
+        debug_println_tokenize!("ascii junk: {text}");
 
         // (we don't do protected patterns)
 
         // trim leading and trailing
         let text = text.trim();
+        debug_println_tokenize!("trimmed: {text}");
 
         // separate special characters outside IsAlnum charset
         let text = PAD_NOT_ISALNUM.substitute(text);
+        debug_println_tokenize!("pad not is alphanumeric: {text}");
 
         // (we don't do aggressive dash splits)
 
         // replace multidots with "DOTDOTMULTI" literal
         let text = self.replace_multidots(&text);
+        debug_println_tokenize!("replace multidots: {text}");
 
         let text = COMMA_SEPARATE_1.substitute(&text);
+        debug_println_tokenize!("comma separate 1: {text}");
         let text = COMMA_SEPARATE_2.substitute(&text);
+        debug_println_tokenize!("comma separate 2: {text}");
         let text = COMMA_SEPARATE_3.substitute(&text);
+        debug_println_tokenize!("comma separate 3: {text}");
 
         let mut text = text.to_string();
         if self.from_lang == "en" {
             for x in ENGLISH_SPECIFIC_APOSTROPHE {
                 text = x.substitute(&text).to_string();
             }
+            debug_println_tokenize!("substituted all english specific apostrophes: {text}");
         } else if self.from_lang == "fr" || self.from_lang == "it" {
             for x in FR_IT_SPECIFIC_APOSTROPHE {
                 text = x.substitute(&text).to_string();
             }
+
+            debug_println_tokenize!("substituted all fr/it specific apostrophes: {text}");
         } else {
             text = NON_SPECIFIC_APOSTROPHE.substitute(&text).to_string();
+            debug_println_tokenize!("substituted all non-specific apostrophes: {text}");
         }
 
         let text = self.handles_nonbreaking_prefixes(&text);
+        debug_println_tokenize!("handled nonbreaking prefixes: {text}");
 
         let text = DEDUPLICATE_SPACE.substitute(&text);
+        debug_println_tokenize!("dedup spaces: {text}");
         let text = TRAILING_DOT_APOSTROPHE.substitute(text.trim());
+        debug_println_tokenize!("trailing dot apostrophes: {text}");
 
         // no protected patterns here
 
         let text = self.restore_multidots(&text);
+        debug_println_tokenize!("restore multidots: {text}");
 
         // we handle XML escapes
         let text = self.escape_xml(&text);
+        debug_println_tokenize!("escape xml: {text}");
 
         text.to_string()
     }
@@ -418,29 +444,33 @@ impl BPETokenizer {
     }
 
     fn handles_nonbreaking_prefixes(&self, text: &str) -> String {
-        let tokens: Vec<_> = text.split(' ').collect();
+        let mut tokens: Vec<_> = text.split(' ').map(|x| x.to_string()).collect();
         let num_tokens = tokens.len();
 
-        for (i, token) in tokens.iter().enumerate() {
+        let mut i: usize = 0;
+        let tokens_length = tokens.len();
+        while i < tokens_length {
+            let token = tokens.get(i).unwrap();
             // check if token ends w/ a full stop
             if let Some(token_ends_with_period) = regex!(r"^(\S+)\.$").captures(token)
                 && let Some(prefix) = token_ends_with_period.get(1) {
-                    let prefix_str = &prefix.as_str();
-                    if (prefix_str.contains(".") && self.isanyalpha(prefix_str.to_string()))
-                        //|| NONBREAKING_PREFIXES // we don't have prefix data
-                        || (
-                            i != num_tokens - 1 && tokens.len() > i + 1 && self.islower(tokens[i + 1].chars().next().unwrap())
-                        )
-                    {
-                        continue; // no change to the token
-                    }
-
-                    // we don't have numeric only prefixes here
-
-                    else {
-                        // tokens[i] = (&prefix.to_string() + " .").as_str(); // how in the fuck
-                    }
+                let prefix_str = &prefix.as_str();
+                if (prefix_str.contains(".") && self.isanyalpha(prefix_str.to_string()))
+                    //|| NONBREAKING_PREFIXES // we don't have prefix data
+                    || (i != num_tokens - 1 && tokens.len() > i + 1 && self.islower(tokens[i + 1].chars().next().unwrap())
+                ) {
+                    continue; // no change to the token
                 }
+
+                // we don't have numeric only prefixes here
+
+                else {
+                    let combined = prefix.as_str().to_string() + " .";
+                    tokens[i] = combined; // how in the fuck
+                }
+            }
+
+            i += 1;
         }
 
         tokens.join(" ")
