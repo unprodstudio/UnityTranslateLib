@@ -328,7 +328,7 @@ macro_rules! debug_println_encode {
 
 macro_rules! debug_println_decode {
      ($($arg:tt)*) => {{
-         if (false) {
+         if (true) {
              println!($($arg)*);
          }
     }};
@@ -605,7 +605,9 @@ impl Tokenizer for BPETokenizer {
     fn decode(&self, tokens: Vec<String>) -> anyhow::Result<String> {
         debug_println_decode!("Start BPE decode, we are v{0}", self.version);
 
-        let mut text = format!(" {} ", tokens.join(" "));
+        let mut text = format!(" {} ", tokens.join(" ")
+            .replace("@@ ", "") // Argos adds this in
+        );
         debug_println_decode!("Combined text {text}");
         text = AGGRESSIVE_HYPHEN_SPLIT.substitute(&text).to_string();
         debug_println_decode!("Replaced text {text}");
@@ -629,7 +631,7 @@ impl Tokenizer for BPETokenizer {
 
         let mut i_mut: usize = 0;
         let mut iter = tokens.iter();
-        while i_mut < iter.len() {
+        while i_mut < tokens.len() {
             let i = i_mut;
             let token = iter.next().unwrap();
             i_mut += 1;
@@ -712,6 +714,7 @@ impl Tokenizer for BPETokenizer {
                     } else {
                         detokenized_text += prepend_space;
                         detokenized_text += token;
+                        prepend_space = "";
                         quote_counts.insert(normalized_quo, *quote_counts.get(normalized_quo).unwrap_or(&0) + 1);
                     }
                 } else {

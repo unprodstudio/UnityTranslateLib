@@ -38,23 +38,23 @@ impl Tokenizer for UnityTranslateTokenizer {
         match self {
             UnityTranslateTokenizer::SentencePiece(sp) => Ok(sp.tokenize(input)),
             UnityTranslateTokenizer::BPE(bpe) => {
-                println!("Encoding {input}");
+                // println!("Encoding {input}");
                 let normalized = bpe.normalizer.normalize(input);
-                println!("Normalized to {normalized}");
+                // println!("Normalized to {normalized}");
                 let joined = bpe.tokenize(normalized.as_str());
 
-                println!("Joined result: {joined}");
+                // println!("Joined result: {joined}");
                 let trimmed = joined
                     .strip_prefix("\r\n ").unwrap_or(joined.as_str())
                     .strip_suffix("\r\n ").unwrap_or(joined.as_str());
-                println!("Trimmed: {trimmed}");
+                // println!("Trimmed: {trimmed}");
                 let split = trimmed.split(" ").map(|x| x.to_string()).collect::<Vec<String>>();
                 let segmented = bpe.segment_tokens(split);
 
-                println!("Segmented: ");
-                for x in segmented.clone() {
-                    println!("{x}");
-                }
+                // println!("Segmented: ");
+                // for x in segmented.clone() {
+                //     println!("{x}");
+                // }
 
                 Ok(segmented)
             },
