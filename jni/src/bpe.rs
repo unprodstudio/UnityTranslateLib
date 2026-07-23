@@ -66,53 +66,61 @@ impl SubstitutionRule {
     }
 }
 
-static DEDUPLICATE_SPACE: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\s+").unwrap()), " ");
-static ASCII_JUNK: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"[\x00-\x1f]").unwrap()), "");
+macro_rules! lazy_regex {
+    ($pattern:expr) => {
+        LazyLock::new(|| Regex::new($pattern).unwrap())
+    };
+}
 
-static PAD_NOT_ISALNUM: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"([^{}\s\.'\`\,\-])", IS_ALNUM)).unwrap()), r" $1 ");
+macro_rules! rule {
+    ($pattern:expr => $replacement:expr) => {
+        SubstitutionRule::new(lazy_regex!($pattern), $replacement)
+    };
+}
 
-static EN_SPECIFIC_1: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"([^{}])[']([^{}])", IS_ALPHA, IS_ALPHA)).unwrap()), r"$1 ' $2");
-static EN_SPECIFIC_2: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"([^{}{}])[']([{}])", IS_ALPHA, IS_N, IS_ALPHA)).unwrap()), r"$1 ' $2");
-static EN_SPECIFIC_3: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"([{}])[']([^{}])", IS_ALPHA, IS_ALPHA)).unwrap()), r"$1 ' $2");
-static EN_SPECIFIC_4: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"([{}])[']([{}])", IS_ALPHA, IS_ALPHA)).unwrap()), r"$1 '$2");
-static EN_SPECIFIC_5: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"([{}])[']([s])", IS_N)).unwrap()), r"$1 '$2");
+macro_rules! rules {
+    [$($pattern:expr => $replacement:expr;)+] => {
+        &[$({static RULE: SubstitutionRule = rule!($pattern => $replacement); &RULE}),*]
+    }
+}
 
-static ENGLISH_SPECIFIC_APOSTROPHE: &[&SubstitutionRule] = &[
-    &EN_SPECIFIC_1,
-    &EN_SPECIFIC_2,
-    &EN_SPECIFIC_3,
-    &EN_SPECIFIC_4,
-    &EN_SPECIFIC_5,
+static DEDUPLICATE_SPACE: SubstitutionRule = rule!(r"\s+" => " ");
+static ASCII_JUNK: SubstitutionRule = rule!(r"[\x00-\x1f]" => "");
+
+static PAD_NOT_ISALNUM: SubstitutionRule =
+    rule!(&format!(r"([^{}\s\.'\`\,\-])", IS_ALNUM) => r" $1 ");
+
+static ENGLISH_SPECIFIC_APOSTROPHE: &[&SubstitutionRule] = rules![
+    &format!(r"([^{}])[']([^{}])", IS_ALPHA, IS_ALPHA) => r"$1 ' $2";
+    &format!(r"([^{}{}])[']([{}])", IS_ALPHA, IS_N, IS_ALPHA) => r"$1 ' $2";
+    &format!(r"([{}])[']([^{}])", IS_ALPHA, IS_ALPHA) => r"$1 ' $2";
+    &format!(r"([{}])[']([{}])", IS_ALPHA, IS_ALPHA) => r"$1 '$2";
+    &format!(r"([{}])[']([s])", IS_N) => r"$1 '$2";
 ];
 
-static FR_IT_SPECIFIC_1: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"([^{}])[']([^{}])", IS_ALPHA, IS_ALPHA)).unwrap()), r"$1 ' $2");
-static FR_IT_SPECIFIC_2: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"([^{}])[']([{}])", IS_ALPHA, IS_ALPHA)).unwrap()), r"$1 ' $2");
-static FR_IT_SPECIFIC_3: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"([{}])[']([^{}])", IS_ALPHA, IS_ALPHA)).unwrap()), r"$1 ' $2");
-static FR_IT_SPECIFIC_4: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"([{}])[']([{}])", IS_ALPHA, IS_ALPHA)).unwrap()), r"$1' $2");
-
-static FR_IT_SPECIFIC_APOSTROPHE: &[&SubstitutionRule] = &[
-    &FR_IT_SPECIFIC_1,
-    &FR_IT_SPECIFIC_2,
-    &FR_IT_SPECIFIC_3,
-    &FR_IT_SPECIFIC_4,
+static FR_IT_SPECIFIC_APOSTROPHE: &[&SubstitutionRule] = rules![
+    &format!(r"([^{}])[']([^{}])", IS_ALPHA, IS_ALPHA) => r"$1 ' $2";
+    &format!(r"([^{}])[']([{}])", IS_ALPHA, IS_ALPHA) => r"$1 ' $2";
+    &format!(r"([{}])[']([^{}])", IS_ALPHA, IS_ALPHA) => r"$1 ' $2";
+    &format!(r"([{}])[']([{}])", IS_ALPHA, IS_ALPHA) => r"$1' $2";
 ];
 
-static COMMA_SEPARATE_1: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"([^{}])[,]", IS_N)).unwrap()), r"$1 , ");
-static COMMA_SEPARATE_2: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"[,]([^{}])", IS_N)).unwrap()), r" , $1");
-static COMMA_SEPARATE_3: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(&format!(r"([{}])[,]$", IS_N)).unwrap()), r"$1 , ");
+static COMMA_SEPARATE_1: SubstitutionRule = rule!(&format!(r"([^{}])[,]", IS_N) => r"$1 , ");
+static COMMA_SEPARATE_2: SubstitutionRule = rule!(&format!(r"[,]([^{}])", IS_N) => r" , $1");
+static COMMA_SEPARATE_3: SubstitutionRule = rule!(&format!(r"([{}])[,]$", IS_N) => r"$1 , ");
 
-static NON_SPECIFIC_APOSTROPHE: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"'").unwrap()), " ' ");
+static NON_SPECIFIC_APOSTROPHE: SubstitutionRule = rule!(r"'" => " ' ");
 
-static TRAILING_DOT_APOSTROPHE: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\.' ?$").unwrap()), " . ' ");
+static TRAILING_DOT_APOSTROPHE: SubstitutionRule = rule!(r"\.' ?$" => " . ' ");
 
-static ESCAPE_AMPERSAND: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"&").unwrap()), r"&amp;");
-static ESCAPE_PIPE: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\|").unwrap()), r"&#124;");
-static ESCAPE_LEFT_ANGLE_BRACKET: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"<").unwrap()), r"&lt;");
-static ESCAPE_RIGHT_ANGLE_BRACKET: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r">").unwrap()), r"&gt;");
-static ESCAPE_SINGLE_QUOTE: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"'").unwrap()), r"&apos;");
-static ESCAPE_DOUBLE_QUOTE: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r#"""#).unwrap()), r"&quot;");
-static ESCAPE_LEFT_SQUARE_BRACKET: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\[").unwrap()), r"&#91;");
-static ESCAPE_RIGHT_SQUARE_BRACKET: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"]").unwrap()), r"&#93;");
+static ESCAPE_AMPERSAND: SubstitutionRule = rule!(r"&" => r"&amp;");
+static ESCAPE_PIPE: SubstitutionRule = rule!(r"\|" => r"&#124;");
+static ESCAPE_LEFT_ANGLE_BRACKET: SubstitutionRule = rule!(r"<" => r"&lt;");
+static ESCAPE_RIGHT_ANGLE_BRACKET: SubstitutionRule = rule!(r">" => r"&gt;");
+static ESCAPE_SINGLE_QUOTE: SubstitutionRule = rule!(r"'" => r"&apos;");
+static ESCAPE_DOUBLE_QUOTE: SubstitutionRule = rule!(r#"""# => r"&quot;");
+static ESCAPE_LEFT_SQUARE_BRACKET: SubstitutionRule = rule!(r"\[" => r"&#91;");
+static ESCAPE_RIGHT_SQUARE_BRACKET: SubstitutionRule = rule!(r"]" => r"&#93;");
 
 static MOSES_ESCAPE_XML_REGEXES: &[&SubstitutionRule] = &[
     &ESCAPE_AMPERSAND,
@@ -126,58 +134,48 @@ static MOSES_ESCAPE_XML_REGEXES: &[&SubstitutionRule] = &[
 ];
 
 // Unescape special characters.
-static UNESCAPE_FACTOR_SEPARATOR: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"&#124;").unwrap()), "|");
-static UNESCAPE_LEFT_ANGLE_BRACKET: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"&lt;").unwrap()), "<");
-static UNESCAPE_RIGHT_ANGLE_BRACKET: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"&gt;").unwrap()), ">");
-static UNESCAPE_DOUBLE_QUOTE: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"&quot;").unwrap()), "\"");
-static UNESCAPE_SINGLE_QUOTE: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"&apos;").unwrap()), "'");
-static UNESCAPE_SYNTAX_NONTERMINAL_LEFT: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"&#91;").unwrap()), "[");
-static UNESCAPE_SYNTAX_NONTERMINAL_RIGHT: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"&#93;").unwrap()), "]");
-static UNESCAPE_AMPERSAND: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"&amp;").unwrap()), "&");
+static UNESCAPE_FACTOR_SEPARATOR: SubstitutionRule = rule!(r"&#124;" => "|");
+static UNESCAPE_LEFT_ANGLE_BRACKET: SubstitutionRule = rule!(r"&lt;" => "<");
+static UNESCAPE_RIGHT_ANGLE_BRACKET: SubstitutionRule = rule!(r"&gt;" => ">");
+static UNESCAPE_DOUBLE_QUOTE: SubstitutionRule = rule!(r"&quot;" => "\"");
+static UNESCAPE_SINGLE_QUOTE: SubstitutionRule = rule!(r"&apos;" => "'");
+static UNESCAPE_SYNTAX_NONTERMINAL_LEFT: SubstitutionRule = rule!(r"&#91;" => "[");
+static UNESCAPE_SYNTAX_NONTERMINAL_RIGHT: SubstitutionRule = rule!(r"&#93;" => "]");
+static UNESCAPE_AMPERSAND: SubstitutionRule = rule!(r"&amp;" => "&");
 
 // The legacy regexes are used to support outputs from older Moses versions.
-static UNESCAPE_FACTOR_SEPARATOR_LEGACY: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"&bar;").unwrap()), "|");
-static UNESCAPE_SYNTAX_NONTERMINAL_LEFT_LEGACY: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"&bra;").unwrap()), "[");
-static UNESCAPE_SYNTAX_NONTERMINAL_RIGHT_LEGACY: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"&ket;").unwrap()), "]");
+static UNESCAPE_FACTOR_SEPARATOR_LEGACY: SubstitutionRule = rule!(r"&bar;" => "|");
+static UNESCAPE_SYNTAX_NONTERMINAL_LEFT_LEGACY: SubstitutionRule = rule!(r"&bra;" => "[");
+static UNESCAPE_SYNTAX_NONTERMINAL_RIGHT_LEGACY: SubstitutionRule = rule!(r"&ket;" => "]");
 
-static AGGRESSIVE_HYPHEN_SPLIT: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r"@-@").unwrap()), "");
+static AGGRESSIVE_HYPHEN_SPLIT: SubstitutionRule = rule!(r"@-@" => "");
 
-static ONE_SPACE: SubstitutionRule = SubstitutionRule::new(LazyLock::new(|| Regex::new(r" {2,}").unwrap()), " ");
+static ONE_SPACE: SubstitutionRule = rule!(r" {2,}" => " ");
 
-static FINNISH_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(&format!(r"^({})({})?({})$",
-                                    FINNISH_MORPHSET_1.replace(' ', "|"),
-                                    FINNISH_MORPHSET_2.replace(' ', "|"),
-                                    FINNISH_MORPHSET_3.replace(' ', "|"),
-)).unwrap());
+static FINNISH_REGEX: LazyLock<Regex> = lazy_regex!(&format!(
+    r"^({})({})?({})$",
+    FINNISH_MORPHSET_1.replace(' ', "|"),
+    FINNISH_MORPHSET_2.replace(' ', "|"),
+    FINNISH_MORPHSET_3.replace(' ', "|"),
+));
 
-static IS_CURRENCY_SYMBOL: LazyLock<Regex> = LazyLock::new(|| Regex::new(
-    r"^[(\[$¢£¤¥֏؋৲৳৻૱௹฿៛₠₡₢₣₤₥₦₧₨₩₪₫€₭₮₯₰₱₲₳₴₵₶₷₸₹₺₻₼₽꠸﷼﹩＄￠￡￥￦;{¿¡]+$"
-).unwrap());
-static IS_ENGLISH_CONTRACTION: LazyLock<Regex> = LazyLock::new(|| Regex::new(
-    &format!(r"^['][{}]", IS_ALPHA)
-).unwrap());
-static IS_FRENCH_CONTRACTION: LazyLock<Regex> = LazyLock::new(|| Regex::new(
-    &format!(r"[{}][']$", IS_ALPHA)
-).unwrap());
-static STARTS_WITH_ALPHA: LazyLock<Regex> = LazyLock::new(|| Regex::new(
-    &format!(r"^[{}]", IS_ALPHA)
-).unwrap());
-static IS_PUNCT: LazyLock<Regex> = LazyLock::new(|| Regex::new(
-    r"^[,.?!:;\\%}]\)]+$"
-).unwrap());
-static IS_OPEN_QUOTE: LazyLock<Regex> = LazyLock::new(|| Regex::new(
-    r#"^['"„“`]+$"#
-).unwrap());
+static IS_CURRENCY_SYMBOL: LazyLock<Regex> =
+    lazy_regex!(r"^[(\[$¢£¤¥֏؋৲৳৻૱௹฿៛₠₡₢₣₤₥₦₧₨₩₪₫€₭₮₯₰₱₲₳₴₵₶₷₸₹₺₻₼₽꠸﷼﹩＄￠￡￥￦;{¿¡]+$");
+static IS_ENGLISH_CONTRACTION: LazyLock<Regex> = lazy_regex!(&format!(r"^['][{}]", IS_ALPHA));
+static IS_FRENCH_CONTRACTION: LazyLock<Regex> = lazy_regex!(&format!(r"[{}][']$", IS_ALPHA));
+static STARTS_WITH_ALPHA: LazyLock<Regex> = lazy_regex!(&format!(r"^[{}]", IS_ALPHA));
+static IS_PUNCT: LazyLock<Regex> = lazy_regex!(r"^[,.?!:;\\%}]\)]+$");
+static IS_OPEN_QUOTE: LazyLock<Regex> = lazy_regex!(r#"^['"„“`]+$"#);
 
-static SYMBOLS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[?!:;\\%]$").unwrap());
-static NUMBERS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[0-9]+$").unwrap());
-static S_END: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"s$").unwrap());
-static COLON: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^:$").unwrap());
-static OPEN_QUOTES: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[„“”]+$").unwrap());
+static SYMBOLS: LazyLock<Regex> = lazy_regex!(r"^[?!:;\\%]$");
+static NUMBERS: LazyLock<Regex> = lazy_regex!(r"^[0-9]+$");
+static S_END: LazyLock<Regex> = lazy_regex!(r"s$");
+static COLON: LazyLock<Regex> = lazy_regex!(r"^:$");
+static OPEN_QUOTES: LazyLock<Regex> = lazy_regex!(r"^[„“”]+$");
 
-static DASH_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[--]$").unwrap());
-static MAIL_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)^li$|^mail.*").unwrap());
-static DOT_COMMA_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[.,]+$").unwrap());
+static DASH_REGEX: LazyLock<Regex> = lazy_regex!(r"^[--]$");
+static MAIL_REGEX: LazyLock<Regex> = lazy_regex!(r"(?i)^li$|^mail.*");
+static DOT_COMMA_REGEX: LazyLock<Regex> = lazy_regex!(r"^[.,]+$");
 
 fn unescape_xml(text: &str) -> String {
     let text = UNESCAPE_FACTOR_SEPARATOR_LEGACY.substitute(text);
@@ -742,117 +740,117 @@ impl Tokenizer for BPETokenizer {
     }
 }
 
-static REPLACE_UNICODE_PUNCTUATION: [SubstitutionRule; 36] = [
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("，").unwrap()), ","),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new(r"。\s*").unwrap()), ". "),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("、").unwrap()), ","),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("”").unwrap()), "\""),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("“").unwrap()), "\""),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("∶").unwrap()), ":"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("：").unwrap()), ":"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("？").unwrap()), "?"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("《").unwrap()), "\""),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("》").unwrap()), "\""),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("）").unwrap()), ")"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("！").unwrap()), "!"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("（").unwrap()), "("),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("；").unwrap()), ";"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("」").unwrap()), "\""),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("「").unwrap()), "\""),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("０").unwrap()), "0"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("１").unwrap()), "1"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("２").unwrap()), "2"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("３").unwrap()), "3"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("４").unwrap()), "4"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("５").unwrap()), "5"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("６").unwrap()), "6"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("７").unwrap()), "7"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("８").unwrap()), "8"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("９").unwrap()), "9"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new(r"．\s*").unwrap()), ". "),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("～").unwrap()), "~"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("’").unwrap()), "'"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("…").unwrap()), "..."),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("━").unwrap()), "-"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("〈").unwrap()), "<"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("〉").unwrap()), ">"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("【").unwrap()), "["),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("】").unwrap()), "]"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("％").unwrap()), "%"),
+static REPLACE_UNICODE_PUNCTUATION: &[&SubstitutionRule] = rules![
+    "，" => ",";
+    r"。\s*" => ". ";
+    "、" => ",";
+    "”" => "\"";
+    "“" => "\"";
+    "∶" => ":";
+    "：" => ":";
+    "？" => "?";
+    "《" => "\"";
+    "》" => "\"";
+    "）" => ")";
+    "！" => "!";
+    "（" => "(";
+    "；" => ";";
+    "」" => "\"";
+    "「" => "\"";
+    "０" => "0";
+    "１" => "1";
+    "２" => "2";
+    "３" => "3";
+    "４" => "4";
+    "５" => "5";
+    "６" => "6";
+    "７" => "7";
+    "８" => "8";
+    "９" => "9";
+    r"．\s*" => ". ";
+    "～" => "~";
+    "’" => "'";
+    "…" => "...";
+    "━" => "-";
+    "〈" => "<";
+    "〉" => ">";
+    "【" => "[";
+    "】" => "]";
+    "％" => "%";
 ];
-static EXTRA_WHITESPACE: [SubstitutionRule; 10] = [  //lines 21 - 30
-    SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\r").unwrap()), r""),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\(").unwrap()), r" ("),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\)").unwrap()), r") "),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new(r" +").unwrap()), r" "),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\) ([.!:?;,])").unwrap()), r")\g<1>"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new(r"\( ").unwrap()), r"("),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new(r" \)").unwrap()), r")"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new(r"(\d) %").unwrap()), r"\g<1>%"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new(r" :").unwrap()), r":"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new(r" ;").unwrap()), r";"),
-];
-
-static NORMALIZE_UNICODE_IF_NOT_PENN: [SubstitutionRule; 2] = [
-    SubstitutionRule::new(LazyLock::new(|| Regex::new(r"`").unwrap()), r"'"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new(r"''").unwrap()), r##" " "##)
-];  //lines 33 - 34
-
-static NORMALIZE_UNICODE: [SubstitutionRule; 15] = [  //lines 37 - 50
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("„").unwrap()), r##"""##),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("“").unwrap()), r##"""##),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("”").unwrap()), r##"""##),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("–").unwrap()), r"-"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("—").unwrap()), r" - "),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new(r" +").unwrap()), r" "),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("´").unwrap()), r"'"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("([a-zA-Z])‘([a-zA-Z])").unwrap()), r"\g<1>'\g<2>"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("([a-zA-Z])’([a-zA-Z])").unwrap()), r"\g<1>'\g<2>"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("‘").unwrap()), r"'"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("‚").unwrap()), r"'"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("’").unwrap()), r"'"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new(r"''").unwrap()), r##"""##),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("´´").unwrap()), r##"""##),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("…").unwrap()), r"..."),
+static EXTRA_WHITESPACE: &[&SubstitutionRule] = rules![  //lines 21 - 30
+    r"\r" => r"";
+    r"\(" => r" (";
+    r"\)" => r") ";
+    r" +" => r" ";
+    r"\) ([.!:?;,])" => r")\g<1>";
+    r"\( " => r"(";
+    r" \)" => r")";
+    r"(\d) %" => r"\g<1>%";
+    r" :" => r":";
+    r" ;" => r";";
 ];
 
-static FRENCH_QUOTES: [SubstitutionRule; 6] = [  //lines 52 - 57
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("\u{00A0}«\u{00A0}").unwrap()), r#"""#),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("«\u{00A0}").unwrap()), r#"""#),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("«").unwrap()), r#"""#),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("\u{00A0}»\u{00A0}").unwrap()), r#"""#),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("\u{00A0}»").unwrap()), r#"""#),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("»").unwrap()), r#"""#),
+static NORMALIZE_UNICODE_IF_NOT_PENN: &[&SubstitutionRule] = rules![
+    r"`" => r"'";
+    r"''" => r##" " "##;
+]; //lines 33 - 34
+
+static NORMALIZE_UNICODE: &[&SubstitutionRule] = rules![  //lines 37 - 50
+    "„" => r##"""##;
+    "“" => r##"""##;
+    "”" => r##"""##;
+    "–" => r"-";
+    "—" => r" - ";
+    r" +" => r" ";
+    "´" => r"'";
+    "([a-zA-Z])‘([a-zA-Z])" => r"\g<1>'\g<2>";
+    "([a-zA-Z])’([a-zA-Z])" => r"\g<1>'\g<2>";
+    "‘" => r"'";
+    "‚" => r"'";
+    "’" => r"'";
+    r"''" => r##"""##;
+    "´´" => r##"""##;
+    "…" => r"...";
 ];
 
-static HANDLE_PSEUDO_SPACES: [SubstitutionRule; 10] = [  //lines 59 - 67
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("\u{00A0}%").unwrap()), r"%"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("nº\u{00A0}").unwrap()), "nº "),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("\u{00A0}:").unwrap()), r":"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("\u{00A0}ºC").unwrap()), " ºC"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("\u{00A0}cm").unwrap()), r" cm"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("\u{00A0}\\?").unwrap()), "?"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("\u{00A0}\\!").unwrap()), "!"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("\u{00A0};").unwrap()), r";"),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new(",\u{00A0}").unwrap()), r").unwrap()), "),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new(r" +").unwrap()), r" "),
+static FRENCH_QUOTES: &[&SubstitutionRule] = rules![  //lines 52 - 57
+    "\u{00A0}«\u{00A0}" => r#"""#;
+    "«\u{00A0}" => r#"""#;
+    "«" => r#"""#;
+    "\u{00A0}»\u{00A0}" => r#"""#;
+    "\u{00A0}»" => r#"""#;
+    "»" => r#"""#;
 ];
 
-static EN_QUOTATION_FOLLOWED_BY_COMMA: [SubstitutionRule; 1] = [
-    SubstitutionRule::new(LazyLock::new(|| Regex::new(r##""([,.]+)"##).unwrap()), r##"\g<1>""##)
+static HANDLE_PSEUDO_SPACES: &[&SubstitutionRule] = rules![  //lines 59 - 67
+    "\u{00A0}%" => r"%";
+    "nº\u{00A0}" => "nº ";
+    "\u{00A0}:" => r":";
+    "\u{00A0}ºC" => " ºC";
+    "\u{00A0}cm" => r" cm";
+    "\u{00A0}\\?" => "?";
+    "\u{00A0}\\!" => "!";
+    "\u{00A0};" => r";";
+    ",\u{00A0}" => r" => ";
+    r" +" => r" ";
 ];
 
-static DE_ES_FR_QUOTATION_FOLLOWED_BY_COMMA: [SubstitutionRule; 2] = [
-    SubstitutionRule::new(LazyLock::new(|| Regex::new(r##",""##).unwrap()), r#"","#),
-    SubstitutionRule::new(LazyLock::new(|| Regex::new(r#"(\.+)"(\s*[^<])"#).unwrap()), r#""\g<1>\g<2>"#),  //don't fix period at end of sentence
+static EN_QUOTATION_FOLLOWED_BY_COMMA: &[&SubstitutionRule] = rules![
+    r##""([,.]+)"## => r##"\g<1>""##;
 ];
 
-static DE_ES_CZ_CS_FR: [SubstitutionRule; 1] = [
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("(\\d)\u{00A0}(\\d)").unwrap()), r"\g<1>,\g<2>"),
+static DE_ES_FR_QUOTATION_FOLLOWED_BY_COMMA: &[&SubstitutionRule] = rules![
+    r##",""## => r#"","#;
+    r#"(\.+)"(\s*[^<])"# => r#""\g<1>\g<2>"#;  //don't fix period at end of sentence
 ];
 
-static OTHER: [SubstitutionRule; 1] = [
-    SubstitutionRule::new(LazyLock::new(|| Regex::new("(\\d)\u{00A0}(\\d)").unwrap()), r"\g<1>.\g<2>"),
+static DE_ES_CZ_CS_FR: &[&SubstitutionRule] = rules![
+    "(\\d)\u{00A0}(\\d)" => r"\g<1>,\g<2>";
+];
+
+static OTHER: &[&SubstitutionRule] = rules![
+    "(\\d)\u{00A0}(\\d)" => r"\g<1>.\g<2>";
 ];
 
 // ported from https://github.com/hplt-project/sacremoses/blob/master/sacremoses/normalize.py
@@ -865,11 +863,11 @@ pub struct PunctNormalizer {
 
 impl PunctNormalizer {
     pub fn new(lang: &str) -> PunctNormalizer {
-        let mut substitutions: Vec<&[SubstitutionRule]> = vec![
-            &EXTRA_WHITESPACE,
-            &NORMALIZE_UNICODE,
-            &FRENCH_QUOTES,
-            &HANDLE_PSEUDO_SPACES,
+        let mut substitutions: Vec<&[&SubstitutionRule]> = vec![
+            EXTRA_WHITESPACE,
+            NORMALIZE_UNICODE,
+            FRENCH_QUOTES,
+            HANDLE_PSEUDO_SPACES,
         ];
 
         let penn = true;
@@ -879,27 +877,27 @@ impl PunctNormalizer {
         let post_remove_control_chars = false;
 
         if penn {
-            substitutions.insert(1, &NORMALIZE_UNICODE_IF_NOT_PENN);
+            substitutions.insert(1, NORMALIZE_UNICODE_IF_NOT_PENN);
         }
 
         if norm_quote_commas {
             if lang == "en" {
-                substitutions.push(&EN_QUOTATION_FOLLOWED_BY_COMMA);
+                substitutions.push(EN_QUOTATION_FOLLOWED_BY_COMMA);
             } else if lang == "de" || lang == "es" || lang == "fr" {
-                substitutions.push(&DE_ES_FR_QUOTATION_FOLLOWED_BY_COMMA);
+                substitutions.push(DE_ES_FR_QUOTATION_FOLLOWED_BY_COMMA);
             }
         }
 
         if norm_numbers {
             if lang == "de" || lang == "es" || lang == "cz" || lang == "cs" || lang == "fr" {
-                substitutions.push(&DE_ES_CZ_CS_FR);
+                substitutions.push(DE_ES_CZ_CS_FR);
             } else {
-                substitutions.push(&OTHER);
+                substitutions.push(OTHER);
             }
         }
 
         PunctNormalizer {
-            substitutions: substitutions.into_iter().flatten().collect(),
+            substitutions: substitutions.into_iter().flatten().copied().collect(),
             pre_replace_unicode_punct,
             post_remove_control_chars,
         }
@@ -925,7 +923,7 @@ impl PunctNormalizer {
     fn replace_unicode_punct(&self, text: String) -> String {
         let mut text: String = text.to_string();
 
-        for x in &REPLACE_UNICODE_PUNCTUATION {
+        for x in REPLACE_UNICODE_PUNCTUATION {
             text = x.substitute(&text).to_string();
         }
 
