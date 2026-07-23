@@ -444,7 +444,7 @@ impl BPETokenizer {
     }
 
     fn handles_nonbreaking_prefixes(&self, text: &str) -> String {
-        let mut tokens: Vec<_> = text.split(' ').map(|x| x.to_string()).collect();
+        let mut tokens: Vec<_> = text.split(' ').map(Cow::Borrowed).collect();
         let num_tokens = tokens.len();
 
         let mut i: usize = 0;
@@ -454,7 +454,7 @@ impl BPETokenizer {
             // check if token ends w/ a full stop
             if let Some(token_ends_with_period) = regex!(r"^(\S+)\.$").captures(token)
                 && let Some(prefix) = token_ends_with_period.get(1) {
-                let prefix_str = &prefix.as_str();
+                let prefix_str = prefix.as_str();
                 if (prefix_str.contains(".") && self.isanyalpha(prefix_str.to_string()))
                     //|| NONBREAKING_PREFIXES // we don't have prefix data
                     || (i != num_tokens - 1 && tokens.len() > i + 1 && self.islower(tokens[i + 1].chars().next().unwrap())
@@ -465,8 +465,7 @@ impl BPETokenizer {
                 // we don't have numeric only prefixes here
 
                 else {
-                    let combined = prefix.as_str().to_string() + " .";
-                    tokens[i] = combined; // how in the fuck
+                    tokens[i] = Cow::Owned(format!("{prefix_str} .")); // how in the fuck
                 }
             }
 
