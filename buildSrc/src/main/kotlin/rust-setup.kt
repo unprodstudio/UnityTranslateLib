@@ -32,11 +32,9 @@ class RustSetup(val project: Project) {
             it.group = "build"
 
             it.into("unitytranslate/$platform/$arch") {
-                it.from(path.resolve("target/release/${System.mapLibraryName("unitytranslatelib")}${when (platform) {
-                    "windows" -> ".dll"
-                    "macos", "mac", "osx", "macosx" -> ".dylib"
-                    else -> ".so"
-                }}"))
+                val path = path.resolve("target/release/${System.mapLibraryName("unitytranslatelib")}")
+                println(path)
+                it.from(path)
             }
 
             it.archiveClassifier.set("natives-$platform-$arch")
@@ -45,7 +43,7 @@ class RustSetup(val project: Project) {
 }
 
 fun Project.natives(setup: RustSetup.() -> Unit): RustSetup {
-    val xmake = RustSetup(this)
-    setup.invoke(xmake)
-    return xmake
+    val rust = RustSetup(this)
+    setup.invoke(rust)
+    return rust
 }
