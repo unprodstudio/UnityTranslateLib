@@ -20,10 +20,10 @@ class UnityTranslateLib {
         if (!translatorPath.exists())
             throw IllegalArgumentException("Could not find translator path ${tokenizerPath.absolutePathString()}!")
 
-        return UnityTranslateLibInstance(this, lang, createInstance(lang.toCode, translatorPath.absolutePathString(), type.ordinal, tokenizerPath.absolutePathString(), useCuda))
+        return UnityTranslateLibInstance(this, lang, createInstance(lang.fromCode, lang.toCode, translatorPath.absolutePathString(), type.ordinal, tokenizerPath.absolutePathString(), useCuda))
     }
 
-    private external fun createInstance(toLang: String, translatorModelPath: String, type: Int, tokenizerModelPath: String, useCuda: Boolean): Long
+    private external fun createInstance(fromLang: String, toLang: String, translatorModelPath: String, type: Int, tokenizerModelPath: String, useCuda: Boolean): Long
     @ApiStatus.Internal
     external fun batchTranslate(instance: Long, textToTranslate: Array<String>, results: Array<String>)
     @ApiStatus.Internal

@@ -39,14 +39,25 @@ impl Tokenizer for UnityTranslateTokenizer {
             let result = sp.tokenize(input);
             Ok(result)
         } else if let Some(bpe) = &self.bpe_tokenizer {
-            let result = bpe.encode(input);
+            println!("Encoding {input}");
+            let normalized = bpe.normalizer.normalize(input);
+            println!("Normalized to {normalized}");
+            let joined = bpe.tokenize(normalized.as_str());
 
-            if let Ok(result) = result {
-                let segmented = bpe.segment_tokens(result);
-                Ok(segmented)
-            } else {
-                Err(result.err().unwrap())
+            println!("Joined result: {joined}");
+            let trimmed = joined
+                .strip_prefix("\r\n ").unwrap_or(joined.as_str())
+                .strip_suffix("\r\n ").unwrap_or(joined.as_str());
+            println!("Trimmed: {trimmed}");
+            let split = trimmed.split(" ").map(|x| x.to_string()).collect::<Vec<String>>();
+            let segmented = bpe.segment_tokens(split);
+
+            println!("Segmented: ");
+            for x in segmented.clone() {
+                println!("{x}");
             }
+
+            Ok(segmented)
         } else {
             Err(anyhow::anyhow!("UnityTranslateTokenizer"))
         }
@@ -68,7 +79,7 @@ impl Tokenizer for UnityTranslateTokenizer {
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_xyz_bluspring_unitytranslate_library_UnityTranslateLib_createInstance<'local>(
     mut unowned_env: EnvUnowned<'local>, class: JClass<'local>,
-    to_lang: JString<'local>, translator_model_path: JString<'local>,
+    from_lang: JString<'local>, to_lang: JString<'local>, translator_model_path: JString<'local>,
     tokenizer_type: jint, tokenizer_model_path: JString<'local>,
     use_cuda: jboolean
 ) -> jlong {
@@ -93,7 +104,10 @@ pub extern "system" fn Java_xyz_bluspring_unitytranslate_library_UnityTranslateL
             TokenizerType::Bpe => {
                 let bpe_model_data_opt = fs::read_to_string(tokenizer_model_value.clone());
                 let bpe_model_data = bpe_model_data_opt.unwrap_or_else(|e| panic!("Couldn't read BPE model file! {tokenizer_model_value} {e}"));
-                let tokenizer = BPETokenizer::new(bpe_model_data.as_str());
+
+                let from_lang_value = from_lang.try_to_string(env).expect("Failed to read from_lang string!");
+                let to_lang_value = to_lang.try_to_string(env).expect("Failed to read to_lang string!");
+                let tokenizer = BPETokenizer::new(bpe_model_data.as_str(), from_lang_value.as_str(), to_lang_value.as_str());
 
                 UnityTranslateTokenizer { sentence_piece_tokenizer: None, bpe_tokenizer: Some(tokenizer) }
             }
