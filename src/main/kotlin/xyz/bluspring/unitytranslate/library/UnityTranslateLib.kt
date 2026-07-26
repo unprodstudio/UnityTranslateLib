@@ -10,6 +10,7 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import kotlin.io.path.Path
 import kotlin.io.path.absolutePathString
+import kotlin.io.path.createDirectories
 import kotlin.io.path.exists
 
 class UnityTranslateLib {
@@ -31,122 +32,77 @@ class UnityTranslateLib {
 
     companion object {
         val logger: Logger = LoggerFactory.getLogger(UnityTranslateLib::class.java)
-        private val platformLibs: List<String>
-            get() {
-                val osName = System.getProperty("os.name").lowercase()
-                val isWindows = osName.contains("win")
-                val isMac = osName.contains("mac")
 
-                val osArch = System.getProperty("os.arch").lowercase().run {
-                    if (isWindows && this == "amd64")
-                        "x64"
-                    else this
-                }
+        private var isLoaded = false
 
-                val dir = "unitytranslate/${if (isWindows) "windows" else if (isMac) "osx" else "linux"}/${osArch}"
-
-                return if (osArch == "x64") {
-                    if (isWindows)
-                        listOf(
-                            "$dir/bin/unitytranslatelib.dll",
-//                            "$dir/bin/ctranslate2.dll",
-//                            "$dir/bin/re2.dll",
-//                            "$dir/bin/cudnn64_9.dll",
-//                            "$dir/bin/libiomp5md.dll",
-                        )
-                    else if (isMac)
-                        listOf()
-                    else
-                        listOf(
-                            "$dir/bin/libUnityTranslateLib.so",
-//                            "$dir/bin/libctranslate2.so",
-//                            "$dir/bin/libcudnn.so",
-//                            "$dir/bin/libgomp.so"
-                        )
-                } else emptyList()
-            }
-        private val cachedPlatformLibs = platformLibs
-
-        // Modified from ImGui-java's library loading - https://github.com/SpaiR/imgui-java/blob/main/imgui-binding/src/main/java/imgui/ImGui.java
         fun autoLoad() {
-            if (isAvailable()) {
-                val libPath = System.getProperty("unitytranslate.library.path")
-                val libName = System.getProperty("unitytranslate.library.name", "UnityTranslateLib")
-                val fullLibName = resolveFullLibName()
-
-                if (libPath != null) {
-                    System.load(Path(libPath).resolve(fullLibName).absolutePathString())
-                } else {
-                    try {
-                        System.loadLibrary(libName)
-                    } catch (e: Throwable) {
-                        val extractedPath = try {
-                            tryLoadFromClassPath(fullLibName)
-                        } catch (e2: Exception) {
-                            val joined = RuntimeException("Failed to load natives for UnityTranslateLib!")
-                            joined.addSuppressed(e2)
-                            joined.addSuppressed(e)
-
-                            throw joined
-                        }
-
-                        val osName = System.getProperty("os.name").lowercase()
-                        val isWindows = osName.contains("win")
-                        val isMac = osName.contains("mac")
-
-                        val osArch = System.getProperty("os.arch").lowercase().run {
-                            if (isWindows && this == "amd64")
-                                "x64"
-                            else this
-                        }
-
-                        val dir = "unitytranslate/${if (isWindows) "windows" else if (isMac) "osx" else "linux"}/${osArch}/bin/"
-
-                        for (lib in platformLibs.reversed()) {
-                            System.load(extractedPath.resolve(lib.removePrefix(dir)).absolutePathString())
-                        }
-                    }
-                }
-            } else {
-                logger.warn("UnityTranslateLib is unsupported on platform ${System.getProperty("os.name")} (${System.getProperty("os.arch")})!")
+            try {
+                this.autoLoadOrThrow()
+            } catch (e: Throwable) {
+                logger.error("Failed to load UnityTranslateLib!", e)
+                logger.warn("UnityTranslateLib may not be supported on platform ${System.getProperty("os.name")} (${System.getProperty("os.arch")})!")
                 logger.warn("As a result, UnityTranslateLib will not be translating, and may cause errors if any native calls are attempted.")
             }
         }
 
-        private fun resolveFullLibName(): String {
-            val osName = System.getProperty("os.name").lowercase()
-            val isWindows = osName.contains("win")
-            val isMac = osName.contains("mac")
+        // Modified from ImGui-java's library loading - https://github.com/SpaiR/imgui-java/blob/main/imgui-binding/src/main/java/imgui/ImGui.java
+        fun autoLoadOrThrow() {
+            if (this.isLoaded)
+                return
 
-            val libPrefix = if (isWindows) "" else "lib"
-            val libSuffix = if (isWindows) ".dll" else if (isMac) ".dylib" else ".so"
+            val libPath = System.getProperty("unitytranslate.library.path")
+            val fullLibName = System.getProperty("unitytranslate.library.name", System.mapLibraryName("unitytranslatelib"))
 
-            return System.getProperty("unitytranslate.library.name", "${libPrefix}UnityTranslateLib${libSuffix}")
+            if (libPath != null) {
+                System.load(Path(libPath).resolve(fullLibName).absolutePathString())
+            } else {
+                try {
+                    System.loadLibrary(fullLibName)
+                } catch (e: Throwable) {
+                    val extractedPath = try {
+                        tryLoadFromClassPath(fullLibName)
+                    } catch (e2: Exception) {
+                        val joined = RuntimeException("Failed to load natives for UnityTranslateLib!")
+                        joined.addSuppressed(e2)
+                        joined.addSuppressed(e)
+
+                        throw joined
+                    }
+
+                    System.load(extractedPath.resolve(fullLibName).absolutePathString())
+                }
+            }
+
+            this.isLoaded = true
         }
 
         private fun tryLoadFromClassPath(fullLibName: String): Path {
             val classLoader = UnityTranslateLib::class.java.classLoader
-            val libs = platformLibs
-
-            if (libs.isEmpty())
-                throw Exception("Unsupported platform ${System.getProperty("os.name")} (${System.getProperty("os.arch")})!")
 
             val tmpDir = Path(System.getProperty("java.io.tmpdir")).resolve("unitytranslate-natives")
 
             if (!tmpDir.exists())
-                tmpDir.toFile().mkdirs()
+                tmpDir.createDirectories()
 
-            for (packedLibPath in libs) {
-                val libName = packedLibPath.split("/").last()
+            val osName = System.getProperty("os.name").lowercase()
+            val isWindows = osName.contains("win")
+            val isMac = osName.contains("mac")
 
-                classLoader.getResourceAsStream(packedLibPath)?.use {
-                    val libPath = tmpDir.resolve(libName)
-                    try {
-                        Files.copy(it, libPath, StandardCopyOption.REPLACE_EXISTING)
-                    } catch (e: AccessDeniedException) {
-                        if (!libPath.exists())
-                            throw e
-                    }
+            val osArch = System.getProperty("os.arch").lowercase().run {
+                if (isWindows && this == "amd64")
+                    "x64"
+                else this
+            }
+
+            val dir = "unitytranslate/${if (isWindows) "windows" else if (isMac) "osx" else "linux"}/${osArch}"
+
+            classLoader.getResourceAsStream("$dir/$fullLibName")?.use {
+                val libPath = tmpDir.resolve(fullLibName)
+                try {
+                    Files.copy(it, libPath, StandardCopyOption.REPLACE_EXISTING)
+                } catch (e: AccessDeniedException) {
+                    if (!libPath.exists())
+                        throw e
                 }
             }
 
@@ -159,7 +115,8 @@ class UnityTranslateLib {
 
         @JvmStatic
         fun isAvailable(): Boolean {
-            return cachedPlatformLibs.isNotEmpty()
+            this.autoLoad()
+            return this.isLoaded
         }
     }
 }
