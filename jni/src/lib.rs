@@ -13,6 +13,7 @@ use std::fs;
 // But at least it's functional.... I think.
 // all this is old code lmao, this all comes from shit I actually wrote Jan 2025!
 // I just ended up coming back here now that I've actually hopefully fixed the BPE problem!
+// thank you @skyevg / @vgskye for the help with making my Rust code actually sane
 
 enum UnityTranslateTokenizer {
     SentencePiece(SentencePieceTokenizer),
@@ -70,7 +71,8 @@ impl Tokenizer for UnityTranslateTokenizer {
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_xyz_bluspring_unitytranslate_library_UnityTranslateLib_createInstance<'local>(
+#[unsafe(export_name = "Java_xyz_bluspring_unitytranslate_library_UnityTranslateLib_createInstance")]
+pub extern "system" fn create_instance<'local>(
     mut unowned_env: EnvUnowned<'local>, _class: JClass<'local>,
     from_lang: JString<'local>, to_lang: JString<'local>, translator_model_path: JString<'local>,
     tokenizer_type: jint, tokenizer_model_path: JString<'local>,
@@ -128,7 +130,8 @@ pub extern "system" fn Java_xyz_bluspring_unitytranslate_library_UnityTranslateL
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_xyz_bluspring_unitytranslate_library_UnityTranslateLib_batchTranslate<'local>(
+#[unsafe(export_name = "Java_xyz_bluspring_unitytranslate_library_UnityTranslateLib_batchTranslate")]
+pub extern "system" fn batch_translate<'local>(
     mut unowned_env: EnvUnowned<'local>, _class: JClass<'local>,
     instance_ptr: jlong, text_to_translate: JObjectArray<'local>, results: JObjectArray<'local>
 ) {
@@ -177,7 +180,8 @@ pub extern "system" fn Java_xyz_bluspring_unitytranslate_library_UnityTranslateL
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_xyz_bluspring_unitytranslate_library_UnityTranslateLib_freeInstance<'local>(
+#[unsafe(export_name = "Java_xyz_bluspring_unitytranslate_library_UnityTranslateLib_freeInstance")]
+pub extern "system" fn free_instance<'local>(
     mut _env: EnvUnowned<'local>, _class: JClass<'local>,
     _instance_ptr: jlong
 ) {
