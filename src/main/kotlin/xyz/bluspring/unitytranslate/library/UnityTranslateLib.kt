@@ -8,10 +8,10 @@ import xyz.bluspring.unitytranslate.library.util.TokenizerType
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
-import kotlin.io.path.Path
-import kotlin.io.path.absolutePathString
-import kotlin.io.path.createDirectories
-import kotlin.io.path.exists
+import java.nio.file.StandardOpenOption
+import java.security.DigestInputStream
+import java.security.MessageDigest
+import kotlin.io.path.*
 
 class UnityTranslateLib {
     fun createInstance(lang: LangPair, type: TokenizerType, tokenizerPath: Path, translatorPath: Path, useCuda: Boolean): UnityTranslateLibInstance {
@@ -79,11 +79,6 @@ class UnityTranslateLib {
         private fun tryLoadFromClassPath(fullLibName: String): Path {
             val classLoader = UnityTranslateLib::class.java.classLoader
 
-            val tmpDir = Path(System.getProperty("java.io.tmpdir")).resolve("unitytranslate-natives")
-
-            if (!tmpDir.exists())
-                tmpDir.createDirectories()
-
             val osName = System.getProperty("os.name").lowercase()
             val isWindows = osName.contains("win")
             val isMac = osName.contains("mac")
@@ -96,21 +91,99 @@ class UnityTranslateLib {
 
             val dir = "unitytranslate/${if (isWindows) "windows" else if (isMac) "osx" else "linux"}/${osArch}"
 
-            classLoader.getResourceAsStream("$dir/$fullLibName")?.use {
-                val libPath = tmpDir.resolve(fullLibName)
-                try {
-                    Files.copy(it, libPath, StandardCopyOption.REPLACE_EXISTING)
-                } catch (e: AccessDeniedException) {
-                    if (!libPath.exists())
-                        throw e
+            val libraryResource = classLoader.getResource("$dir/$fullLibName")
+                ?: throw Exception("Could not locate UnityTranslateLib natives for platform $osName $osArch!")
+
+            val tmpDir = Path(System.getProperty("java.io.tmpdir")).resolve("unitytranslate-natives")
+
+            if (!tmpDir.exists())
+                tmpDir.createDirectories()
+
+            // first, try to hash the file
+            val digest = MessageDigest.getInstance("MD5")
+            libraryResource.openStream().use {
+                DigestInputStream(it, digest).readAllBytes()
+            }
+
+            val expectedHash = digest.digest().toHexString()
+            val hashedTmpDir = tmpDir.resolve(expectedHash)
+            if (!hashedTmpDir.exists())
+                hashedTmpDir.createDirectories()
+
+            val unityTranslateLibPath = hashedTmpDir.resolve(fullLibName)
+            val lockFile = hashedTmpDir.resolve("session.lock")
+
+            if (unityTranslateLibPath.exists()) {
+                // hash the file and see if it matches
+                unityTranslateLibPath.inputStream(StandardOpenOption.READ).use {
+                    DigestInputStream(it, digest).readAllBytes()
+                }
+
+                // hash matches, we're good
+                if (expectedHash == digest.digest().toHexString())
+                    return hashedTmpDir
+
+                // nope, let's see if someone's currently copying it.
+                // if so, we should block the thread until the lock is invalid.
+                if (lockFile.exists()) {
+                    val pid = lockFile.readText().trim().toLongOrNull()
+                    if (pid != null && ProcessHandle.of(pid).isPresent) {
+                        while (true) {
+                            // check if the lock file still exists
+                            val pid = if (lockFile.exists()) {
+                                lockFile.readText().trim().toLongOrNull()
+                            } else break
+
+                            // also check if the process still exists
+                            if (pid == null || ProcessHandle.of(pid).isEmpty)
+                                break
+
+                            // let's not check too frequently...
+                            Thread.sleep(2_500L)
+                        }
+
+                        // okay, let's check again just to be safe.
+                        unityTranslateLibPath.inputStream(StandardOpenOption.READ).use {
+                            DigestInputStream(it, digest).readAllBytes()
+                        }
+
+                        if (expectedHash == digest.digest().toHexString())
+                            return hashedTmpDir
+                    }
+
+                    // fuck, okay let's continue extracting us I guess, we assume the program crashed or failed or something.
                 }
             }
 
-            val unityTranslatePath = tmpDir.resolve(fullLibName)
-            if (!unityTranslatePath.exists())
-                throw Exception("Failed to extract library files for UnityTranslateLib!")
+            libraryResource.openStream().use {
+                try {
+                    // we want to make sure we're not copying all at once.
+                    lockFile.writeText("${ProcessHandle.current().pid()}", options = arrayOf(StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING))
 
-            return tmpDir
+                    Files.copy(it, unityTranslateLibPath, StandardCopyOption.REPLACE_EXISTING)
+                } catch (e: AccessDeniedException) {
+                    if (!unityTranslateLibPath.exists())
+                        throw e
+                } finally {
+                    // okay, we're done here.
+                    lockFile.deleteIfExists()
+                }
+            }
+
+            if (!unityTranslateLibPath.exists())
+                throw Exception("Failed to extract library files for UnityTranslateLib!")
+            else {
+                unityTranslateLibPath.inputStream(StandardOpenOption.READ).use {
+                    DigestInputStream(it, digest).readAllBytes()
+                }
+
+                // uh oh
+                val actualHash = digest.digest().toHexString()
+                if (expectedHash != actualHash)
+                    throw IllegalStateException("Extracted library hash for UnityTranslateLib does not match! (expected: $expectedHash, got: $actualHash)")
+            }
+
+            return hashedTmpDir
         }
 
         @JvmStatic
