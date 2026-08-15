@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.kotlin)
     alias(libs.plugins.kotlin.serialization)
     `maven-publish`
+    id("rust-setup")
 }
 
 group = "xyz.bluspring.unitytranslate"
@@ -34,7 +35,7 @@ kotlin {
     jvmToolchain(17)
 }
 
-val rust = natives {
+val rust = natives("unitytranslatelib") {
     path = projectDir.toPath().resolve("jni")
 
     platform("windows", "x64")

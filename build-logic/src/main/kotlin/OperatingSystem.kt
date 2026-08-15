@@ -2,7 +2,8 @@ object OperatingSystem {
     enum class Type(val formatted: String) {
         WINDOWS("Windows"),
         MAC("macOS"),
-        LINUX("Linux"), OTHER("(unknown)");
+        LINUX("Linux"),
+        OTHER("(unknown)");
     }
 
     val type: Type = System.getProperty("os.name", "generic").lowercase().run {

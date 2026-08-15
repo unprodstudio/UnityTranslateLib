@@ -14,13 +14,19 @@ abstract class RustCompileTask : Exec() {
     @Input
     var extraArgs: MutableList<String> = mutableListOf()
 
+    @Input
+    var libraryName: String = ""
+
     @TaskAction
     override fun exec() {
+        if (libraryName.isBlank())
+            throw IllegalArgumentException("Library name must be specified!")
+
         val currentOs = OperatingSystem.type
         val extraArgs = this.extraArgs.toMutableList()
         var platform = this.platform
 
-        commandLine("cargo", "build", "--profile", "release", "--package", "unitytranslatelib", *extraArgs.toTypedArray())
+        commandLine("cargo", "build", "--profile", "release", "--package", libraryName, *extraArgs.toTypedArray())
         super.exec()
     }
 }
