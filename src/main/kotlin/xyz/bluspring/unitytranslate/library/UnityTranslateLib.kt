@@ -33,6 +33,7 @@ class UnityTranslateLib {
     companion object {
         val logger: Logger = LoggerFactory.getLogger(UnityTranslateLib::class.java)
 
+        private var hasTriedLoading = false
         private var isLoaded = false
 
         fun autoLoad() {
@@ -42,6 +43,8 @@ class UnityTranslateLib {
                 logger.error("Failed to load UnityTranslateLib!", e)
                 logger.warn("UnityTranslateLib may not be supported on platform ${System.getProperty("os.name")} (${System.getProperty("os.arch")})!")
                 logger.warn("As a result, UnityTranslateLib will not be translating, and may cause errors if any native calls are attempted.")
+            } finally {
+                this.hasTriedLoading = true
             }
         }
 
@@ -188,7 +191,10 @@ class UnityTranslateLib {
 
         @JvmStatic
         fun isAvailable(): Boolean {
-            this.autoLoad()
+            if (!this.hasTriedLoading) {
+                this.autoLoad()
+            }
+
             return this.isLoaded
         }
     }
