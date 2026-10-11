@@ -229,9 +229,9 @@ dependencies = [
 
 [[package]]
 name = "ct2rs"
-version = "0.9.22"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b491b6713dc42cb57cc4c437369ea120b72aa8d930391815a6519c3725fbf35"
+checksum = "b68f8baf9feaac18f4380e1079ed2c633f7703cee391d34521f5dded6c005725"
 dependencies = [
  "anyhow",
  "cmake",
