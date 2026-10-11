@@ -26,7 +26,7 @@ class RustSetup(val project: Project, val libraryName: String) {
             this.platform = platform
             this.arch = arch
             this.extraArgs.addAll(extraArgs)
-            this.libraryName = "starmedia_natives"
+            this.libraryName = this@RustSetup.libraryName
         }
 
         val platformTask = project.tasks.register("nativesJar$taskName", Jar::class.java) {
