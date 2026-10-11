@@ -92,7 +92,7 @@ class UnityTranslateLib {
                 else this
             }
 
-            val dir = "unitytranslate/${if (isWindows) "windows" else if (isMac) "osx" else "linux"}/${osArch}"
+            val dir = "unitytranslatelib/${if (isWindows) "windows" else if (isMac) "osx" else "linux"}/${osArch}"
 
             val libraryResource = classLoader.getResource("$dir/$fullLibName")
                 ?: throw Exception("Could not locate UnityTranslateLib natives for platform $osName $osArch!")
