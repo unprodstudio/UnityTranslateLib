@@ -8,7 +8,7 @@ use jni::EnvUnowned;
 use rust_tokenizers::tokenizer::{SentencePieceTokenizer, Tokenizer as RTTokenizer};
 use std::cmp::max;
 use std::fs;
-
+use std::ptr::with_exposed_provenance_mut;
 // I know I'm not good at Rust.
 // But at least it's functional.... I think.
 // all this is old code lmao, this all comes from shit I actually wrote Jan 2025!
@@ -16,8 +16,8 @@ use std::fs;
 // thank you @skyevg / @vgskye for the help with making my Rust code actually sane
 
 enum UnityTranslateTokenizer {
-    SentencePiece(SentencePieceTokenizer),
-    BPE(BPETokenizer),
+    SentencePiece(Box<SentencePieceTokenizer>),
+    BPE(Box<BPETokenizer>),
 }
 
 enum TokenizerType {
@@ -93,7 +93,7 @@ pub extern "system" fn create_instance<'local>(
                 let tokenizer = SentencePieceTokenizer::from_file(tokenizer_model_value, false)
                     .expect("Couldn't load SentencePiece model path!");
 
-                UnityTranslateTokenizer::SentencePiece(tokenizer)
+                UnityTranslateTokenizer::SentencePiece(Box::new(tokenizer))
             }
 
             TokenizerType::Bpe => {
@@ -104,7 +104,7 @@ pub extern "system" fn create_instance<'local>(
                 let to_lang_value = to_lang.try_to_string(env).expect("Failed to read to_lang string!");
                 let tokenizer = BPETokenizer::new(bpe_model_data.as_str(), from_lang_value.as_str(), to_lang_value.as_str());
 
-                UnityTranslateTokenizer::BPE(tokenizer)
+                UnityTranslateTokenizer::BPE(Box::new(tokenizer))
             }
         };
 
@@ -117,7 +117,7 @@ pub extern "system" fn create_instance<'local>(
         let translator_result = Translator::with_tokenizer(model_path_value, tokenizer, &config);
 
         if let Ok(translator) = translator_result {
-            Ok(Box::into_raw(Box::new(translator)) as jlong)
+            Ok(Box::into_raw(Box::new(translator)).expose_provenance() as jlong)
         } else if let Err(err) = translator_result {
             println!("Error: {:?}", err);
             panic!("An error occurred!")
@@ -136,10 +136,8 @@ pub extern "system" fn batch_translate<'local>(
     instance_ptr: jlong, text_to_translate: JObjectArray<'local>, results: JObjectArray<'local>
 ) {
     let outcome = unowned_env.with_env(|env| -> jni::errors::Result<_> {
-        let translator: &mut Translator<UnityTranslateTokenizer>;
-        unsafe {
-            translator = Box::leak(Box::from_raw(instance_ptr as *mut Translator<UnityTranslateTokenizer>));
-        }
+        let translator_ptr: *mut Translator<UnityTranslateTokenizer> = with_exposed_provenance_mut(instance_ptr as usize);
+        let translator = unsafe { Box::leak(Box::from_raw(translator_ptr)) };
         // Recreate Argos Translate's behaviour
         let num_hypotheses = 4;
         let options = TranslationOptions {
@@ -182,8 +180,16 @@ pub extern "system" fn batch_translate<'local>(
 #[unsafe(no_mangle)]
 #[unsafe(export_name = "Java_xyz_bluspring_unitytranslate_library_UnityTranslateLib_freeInstance")]
 pub extern "system" fn free_instance<'local>(
-    mut _env: EnvUnowned<'local>, _class: JClass<'local>,
-    _instance_ptr: jlong
+    mut unowned_env: EnvUnowned<'local>, _class: JClass<'local>,
+    instance_ptr: jlong
 ) {
-    // this might not actually be needed.....
+    let outcome = unowned_env.with_env(|env| -> jni::errors::Result<_> {
+        let translator_ptr: *mut Translator<UnityTranslateTokenizer> = with_exposed_provenance_mut(instance_ptr as usize);
+        let translator = unsafe { Box::leak(Box::from_raw(translator_ptr)) };
+
+        // drop(translator); // TODO: how do we do this
+        Ok(())
+    });
+
+    outcome.resolve::<jni::errors::ThrowRuntimeExAndDefault>();
 }
