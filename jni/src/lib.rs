@@ -146,7 +146,7 @@ pub extern "system" fn batch_translate<'local>(
             beam_size: max(num_hypotheses, 4),
             num_hypotheses,
             length_penalty: 0.2,
-            return_scores: true,
+            return_scores: false,
             ..Default::default()
         };
 
