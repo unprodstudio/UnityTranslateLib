@@ -110,6 +110,7 @@ pub extern "system" fn create_instance<'local>(
 
         let config = Config {
             device,
+            num_threads_per_replica: 1,
             ..Default::default()
         };
 
